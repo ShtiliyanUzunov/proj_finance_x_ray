@@ -3,7 +3,10 @@
     "allow": [
       "Bash(npx vite *)",
       "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); from config import DATA_DIR; print\\('DATA_DIR =', DATA_DIR\\)\")",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(git check-ignore *)",
+      "Bash(mkdir -p categorization)",
+      "Bash(git mv *)"
     ]
   }
 }

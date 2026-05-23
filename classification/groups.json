@@ -1,0 +1,16 @@
+[
+  {
+    "name": "Food",
+    "children": [
+      "FANTASTICO",
+      "LIDL"
+    ]
+  },
+  {
+    "name": "Subscriptions",
+    "children": [
+      "HBO",
+      "Google"
+    ]
+  }
+]

@@ -6,13 +6,17 @@ import {
   Box,
   Checkbox,
   CircularProgress,
+  FormControl,
   FormControlLabel,
   IconButton,
+  InputLabel,
+  ListSubheader,
+  MenuItem,
+  Select,
   Stack,
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   ToggleButton,
   ToggleButtonGroup,
@@ -21,7 +25,16 @@ import {
 import CloseIcon from '@mui/icons-material/Close'
 import { BarChart } from '@mui/x-charts/BarChart'
 import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine'
-import { getTimeline, getTransactions, type TimelinePoint, type Transaction } from '../../api'
+import {
+  getGroups,
+  getRules,
+  getTimeline,
+  getTransactions,
+  type Group,
+  type Rule,
+  type TimelinePoint,
+  type Transaction,
+} from '../../api'
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -72,15 +85,59 @@ const amountFmt = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 2,
 })
 
+// Encoded as `cat:<name>` or `group:<name>` so MUI Select can use a flat string value.
+const FILTER_ALL = ''
+
+function parseFilter(value: string): { type: 'cat' | 'group'; name: string } | null {
+  if (!value) return null
+  const idx = value.indexOf(':')
+  if (idx < 0) return null
+  const type = value.slice(0, idx)
+  if (type !== 'cat' && type !== 'group') return null
+  return { type, name: value.slice(idx + 1) }
+}
+
+// Walk a group's children to the set of leaf category names it ultimately resolves to.
+// Unknown children (not a group, not a known leaf) are treated as leaves — matches
+// server-side semantics in services/groups.py.
+function resolveGroupLeaves(
+  name: string,
+  groupsByName: Map<string, string[]>,
+  leafNames: Set<string>,
+): Set<string> {
+  const result = new Set<string>()
+  const visited = new Set<string>()
+  const walk = (n: string) => {
+    if (visited.has(n)) return
+    visited.add(n)
+    const children = groupsByName.get(n)
+    if (!children) {
+      result.add(n)
+      return
+    }
+    for (const child of children) {
+      if (groupsByName.has(child)) walk(child)
+      else result.add(child)
+    }
+  }
+  walk(name)
+  // Drop names that don't correspond to any real category (defensive against stale group refs).
+  for (const n of [...result]) if (!leafNames.has(n)) result.delete(n)
+  return result
+}
+
 export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
   const navigate = useNavigate()
   const [items, setItems] = useState<TimelinePoint[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [rules, setRules] = useState<Rule[]>([])
+  const [groups, setGroups] = useState<Group[]>([])
   const [bucket, setBucket] = useState<'day' | 'month'>('day')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showDebit, setShowDebit] = useState(true)
   const [showCredit, setShowCredit] = useState(false)
+  const [filterValue, setFilterValue] = useState<string>(FILTER_ALL)
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -90,18 +147,21 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
     if (!from || !to) return
     setLoading(true)
     setError(null)
-    Promise.all([getTimeline(from, to, bucket), getTransactions(from, to)])
-      .then(([t, tx]) => {
+    Promise.all([
+      getTimeline(from, to, bucket),
+      getTransactions(from, to),
+      getRules(),
+      getGroups(),
+    ])
+      .then(([t, tx, r, g]) => {
         setItems(t.items)
         setTransactions(tx)
+        setRules(r.rules)
+        setGroups(g.groups)
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false))
   }, [from, to, bucket])
-
-  useEffect(() => {
-    onMeta?.({ bucket, count: items.length })
-  }, [bucket, items.length, onMeta])
 
   useEffect(() => {
     return () => onMeta?.(null)
@@ -119,31 +179,76 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
     return () => ro.disconnect()
   }, [])
 
+  const leafNames = useMemo(() => new Set(rules.map((r) => r.category)), [rules])
+  const groupsByName = useMemo(
+    () => new Map(groups.map((g) => [g.name, g.children] as const)),
+    [groups],
+  )
+
+  const filter = parseFilter(filterValue)
+
+  // Set of leaf category names the filter resolves to. null = no filter (show everything).
+  const filterLeaves = useMemo(() => {
+    if (!filter) return null
+    if (filter.type === 'cat') return new Set([filter.name])
+    return resolveGroupLeaves(filter.name, groupsByName, leafNames)
+  }, [filter?.type, filter?.name, groupsByName, leafNames])
+
+  const filteredTransactions = useMemo(() => {
+    if (!filterLeaves) return transactions
+    return transactions.filter((t) => t.category !== null && filterLeaves.has(t.category))
+  }, [transactions, filterLeaves])
+
   const txnsByPeriod = useMemo(() => {
     const map = new Map<string, Transaction[]>()
-    for (const t of transactions) {
+    for (const t of filteredTransactions) {
       const key = bucket === 'day' ? t.date : t.date.slice(0, 7)
       const arr = map.get(key)
       if (arr) arr.push(t)
       else map.set(key, [t])
     }
     return map
-  }, [transactions, bucket])
+  }, [filteredTransactions, bucket])
 
-  // Close popup when bucket changes (period keys aren't comparable across buckets).
+  // When a filter is active, derive bars from the filtered transactions so totals match
+  // what shows in the side panel. Without a filter, keep using the server-computed series
+  // (it includes uncategorized rows, which the client-side derivation would silently drop).
+  const chartItems = useMemo<TimelinePoint[]>(() => {
+    if (!filterLeaves) return items
+    const periods = [...txnsByPeriod.keys()].sort()
+    return periods.map((period) => {
+      let debit = 0
+      let credit = 0
+      for (const t of txnsByPeriod.get(period) ?? []) {
+        if (t.debit !== null) debit += t.debit
+        if (t.credit !== null) credit += t.credit
+      }
+      return { period, debit, credit }
+    })
+  }, [filterLeaves, items, txnsByPeriod])
+
+  useEffect(() => {
+    onMeta?.({ bucket, count: chartItems.length })
+  }, [bucket, chartItems.length, onMeta])
+
+  // Close popup when bucket changes (period keys aren't comparable across buckets) or when
+  // a filter switch removes the previously selected period from the chart.
   useEffect(() => {
     setSelectedPeriod(null)
   }, [bucket])
+  useEffect(() => {
+    if (selectedPeriod && !txnsByPeriod.has(selectedPeriod)) setSelectedPeriod(null)
+  }, [txnsByPeriod, selectedPeriod])
 
-  const minWidth = items.length * MIN_GROUP_WIDTH + CHART_PADDING
-  const maxWidth = items.length * MAX_GROUP_WIDTH[bucket] + CHART_PADDING
+  const minWidth = chartItems.length * MIN_GROUP_WIDTH + CHART_PADDING
+  const maxWidth = chartItems.length * MAX_GROUP_WIDTH[bucket] + CHART_PADDING
   const chartWidth = Math.min(Math.max(containerWidth || minWidth, minWidth), maxWidth)
 
   const series: { data: number[]; label: string; color: string }[] = []
-  if (showDebit) series.push({ data: items.map((d) => d.debit), label: 'Debit', color: DEBIT_COLOR })
-  if (showCredit) series.push({ data: items.map((d) => d.credit), label: 'Credit', color: CREDIT_COLOR })
+  if (showDebit) series.push({ data: chartItems.map((d) => d.debit), label: 'Debit', color: DEBIT_COLOR })
+  if (showCredit) series.push({ data: chartItems.map((d) => d.credit), label: 'Credit', color: CREDIT_COLOR })
 
-  const boundaries = bucket === 'day' ? monthBoundaries(items) : []
+  const boundaries = bucket === 'day' ? monthBoundaries(chartItems) : []
 
   const panel = selectedPeriod ? (
       <Box
@@ -195,6 +300,31 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
             checked={showCredit}
             onChange={setShowCredit}
           />
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel id="timeline-filter-label">Category / Group</InputLabel>
+            <Select
+              labelId="timeline-filter-label"
+              label="Category / Group"
+              value={filterValue}
+              onChange={(e) => setFilterValue(e.target.value)}
+            >
+              <MenuItem value={FILTER_ALL}>
+                <em>All</em>
+              </MenuItem>
+              {groups.length > 0 && <ListSubheader>Groups</ListSubheader>}
+              {groups.map((g) => (
+                <MenuItem key={`group:${g.name}`} value={`group:${g.name}`}>
+                  {g.name}
+                </MenuItem>
+              ))}
+              {leafNames.size > 0 && <ListSubheader>Categories</ListSubheader>}
+              {[...leafNames].sort().map((name) => (
+                <MenuItem key={`cat:${name}`} value={`cat:${name}`}>
+                  {name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Stack>
 
         {loading ? (
@@ -203,9 +333,11 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
           </Box>
         ) : error ? (
           <Alert severity="error">{error}</Alert>
-        ) : items.length === 0 ? (
+        ) : chartItems.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            No dated transactions in the selected range.
+            {filter
+              ? `No transactions matched “${filter.name}” in the selected range.`
+              : 'No dated transactions in the selected range.'}
           </Typography>
         ) : series.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
@@ -225,7 +357,7 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
                 }}
                 xAxis={[
                   {
-                    data: items.map((d) => d.period),
+                    data: chartItems.map((d) => d.period),
                     scaleType: 'band',
                     tickLabelStyle: { fontSize: 11 },
                     categoryGapRatio: 0.3,

@@ -35,12 +35,13 @@ server/
   main.py                  # uvicorn entrypoint
   app/
     main.py                # FastAPI() instance, middleware, router includes
-    config.py              # DATA_DIR + env loading
+    config.py              # DATA_DIR (CSV uploads) + CLASSIFICATION_DIR + env loading
     models.py              # Pydantic request/response schemas
     parsing.py             # text/amount/date helpers, CsvSchema, read_csv_rows
     services/
       csv_files.py         # path safety, summarize, file_info, listing
-      rules.py             # rules.json load/save
+      rules.py             # classification/rules.json load/save
+      groups.py            # classification/groups.json load/save + validation
     routers/
       health.py            # /ping
       csv.py               # /csv*

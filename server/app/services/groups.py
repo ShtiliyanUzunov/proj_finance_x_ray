@@ -5,18 +5,18 @@ has a `name` and a list of `children` (which may resolve to leaves or to other
 groups). Groups themselves carry no matching logic — they are purely a
 presentational/reporting overlay.
 
-Stored as a JSON list at `DATA_DIR/groups.json` so the file is human-editable
-and survives across server restarts.
+Stored as a JSON list at `CLASSIFICATION_DIR/groups.json` so the file is
+human-editable and survives across server restarts.
 """
 
 from __future__ import annotations
 
 import json
 
-from ..config import DATA_DIR
+from ..config import CLASSIFICATION_DIR
 from ..models import Group
 
-_GROUPS_PATH = DATA_DIR / "groups.json"
+_GROUPS_PATH = CLASSIFICATION_DIR / "groups.json"
 
 
 def load_groups() -> list[dict]:

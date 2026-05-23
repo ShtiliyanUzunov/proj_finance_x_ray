@@ -1,18 +1,18 @@
 """Persistence for categorization rules.
 
-Rules live as a JSON list at `DATA_DIR/rules.json`. The file is written with
-`ensure_ascii=False` so non-ASCII column names (e.g. Cyrillic headers) remain
-human-readable on disk.
+Rules live as a JSON list at `CLASSIFICATION_DIR/rules.json`. The file is written
+with `ensure_ascii=False` so non-ASCII column names (e.g. Cyrillic headers)
+remain human-readable on disk.
 """
 
 from __future__ import annotations
 
 import json
 
-from ..config import DATA_DIR
+from ..config import CLASSIFICATION_DIR
 from ..models import Rule
 
-_RULES_PATH = DATA_DIR / "rules.json"
+_RULES_PATH = CLASSIFICATION_DIR / "rules.json"
 
 
 def load_rule_models() -> list[Rule]:
