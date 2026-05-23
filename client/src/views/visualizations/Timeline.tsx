@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   Alert,
   Box,
   Checkbox,
   CircularProgress,
   FormControlLabel,
-  Paper,
+  IconButton,
   Stack,
   Table,
   TableBody,
@@ -16,9 +18,9 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
 import { BarChart } from '@mui/x-charts/BarChart'
 import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine'
-import { useAxesTooltip, type ChartsTooltipProps } from '@mui/x-charts/ChartsTooltip'
 import { getTimeline, getTransactions, type TimelinePoint, type Transaction } from '../../api'
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -47,18 +49,21 @@ interface Props {
   from: string
   to: string
   onMeta?: (meta: TimelineMeta | null) => void
+  panelTarget?: HTMLElement | null
 }
 
 const MIN_GROUP_WIDTH = 30
-const MAX_GROUP_WIDTH = 110
+const MAX_GROUP_WIDTH: Record<'day' | 'month', number> = {
+  day: 110,
+  month: 220,
+}
 const CHART_PADDING = 80
 const CHART_HEIGHT = 420
 const LEFT_MARGIN = 44
 const RIGHT_MARGIN = 8
 const DEBIT_COLOR = '#d32f2f'
 const CREDIT_COLOR = '#2e7d32'
-const HOVER_CLOSE_DELAY = 250
-const PAPER_WIDTH = 440
+const PANEL_WIDTH = 440
 
 const amountFmt = new Intl.NumberFormat(undefined, {
   style: 'currency',
@@ -67,7 +72,8 @@ const amountFmt = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 2,
 })
 
-export default function Timeline({ from, to, onMeta }: Props) {
+export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
+  const navigate = useNavigate()
   const [items, setItems] = useState<TimelinePoint[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [bucket, setBucket] = useState<'day' | 'month'>('day')
@@ -75,11 +81,10 @@ export default function Timeline({ from, to, onMeta }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [showDebit, setShowDebit] = useState(true)
   const [showCredit, setShowCredit] = useState(false)
-  const [hoveredPeriod, setHoveredPeriod] = useState<string | null>(null)
+  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(0)
-  const closeTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!from || !to) return
@@ -114,12 +119,6 @@ export default function Timeline({ from, to, onMeta }: Props) {
     return () => ro.disconnect()
   }, [])
 
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
-    }
-  }, [])
-
   const txnsByPeriod = useMemo(() => {
     const map = new Map<string, Transaction[]>()
     for (const t of transactions) {
@@ -131,45 +130,13 @@ export default function Timeline({ from, to, onMeta }: Props) {
     return map
   }, [transactions, bucket])
 
+  // Close popup when bucket changes (period keys aren't comparable across buckets).
   useEffect(() => {
-    setHoveredPeriod(null)
+    setSelectedPeriod(null)
   }, [bucket])
 
-  const cancelClose = useCallback(() => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current)
-      closeTimerRef.current = null
-    }
-  }, [])
-
-  const scheduleClose = useCallback(() => {
-    cancelClose()
-    closeTimerRef.current = window.setTimeout(() => {
-      setHoveredPeriod(null)
-      closeTimerRef.current = null
-    }, HOVER_CLOSE_DELAY)
-  }, [cancelClose])
-
-  // Stable callback that the in-chart hover reader pushes axis-hover updates to.
-  const hoverCallbackRef = useRef<(period: string | null) => void>(() => {})
-  hoverCallbackRef.current = (period) => {
-    if (period) {
-      cancelClose()
-      setHoveredPeriod(period)
-    } else {
-      scheduleClose()
-    }
-  }
-
-  const tooltipSlot = useMemo(() => {
-    return function HoverSlot(_props: ChartsTooltipProps) {
-      return <AxisHoverReader callbackRef={hoverCallbackRef} />
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   const minWidth = items.length * MIN_GROUP_WIDTH + CHART_PADDING
-  const maxWidth = items.length * MAX_GROUP_WIDTH + CHART_PADDING
+  const maxWidth = items.length * MAX_GROUP_WIDTH[bucket] + CHART_PADDING
   const chartWidth = Math.min(Math.max(containerWidth || minWidth, minWidth), maxWidth)
 
   const series: { data: number[]; label: string; color: string }[] = []
@@ -178,138 +145,116 @@ export default function Timeline({ from, to, onMeta }: Props) {
 
   const boundaries = bucket === 'day' ? monthBoundaries(items) : []
 
-  const bandIndex = hoveredPeriod ? items.findIndex((d) => d.period === hoveredPeriod) : -1
-  const innerWidth = Math.max(chartWidth - LEFT_MARGIN - RIGHT_MARGIN, 0)
-  const bandWidth = items.length > 0 ? innerWidth / items.length : 0
-  const columnCenterX = bandIndex >= 0 ? LEFT_MARGIN + (bandIndex + 0.5) * bandWidth : 0
-  // Place the popup to the right of the column so the bar stays visible. Flip to the left
-  // side if there isn't enough room on the right.
-  const POPUP_GAP = 45
-  const halfBand = bandWidth / 2
-  let paperLeft = columnCenterX + halfBand + POPUP_GAP
-  if (paperLeft + PAPER_WIDTH > chartWidth) {
-    paperLeft = columnCenterX - halfBand - POPUP_GAP - PAPER_WIDTH
-  }
-  paperLeft = Math.max(0, Math.min(chartWidth - PAPER_WIDTH, paperLeft))
+  const panel = selectedPeriod ? (
+      <Box
+        sx={{
+          width: PANEL_WIDTH,
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          alignSelf: 'stretch',
+          borderLeft: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <TimelineDetails
+          period={selectedPeriod}
+          bucket={bucket}
+          transactions={txnsByPeriod.get(selectedPeriod) ?? []}
+          onClose={() => setSelectedPeriod(null)}
+          onTransactionClick={(t) => {
+            navigate(`/inspect/${encodeURIComponent(t.source)}?row=${t.row_index}`)
+          }}
+        />
+      </Box>
+    ) : null
 
   return (
-    <Box>
-      <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: 'center' }}>
-        <ToggleButtonGroup
-          value={bucket}
-          exclusive
-          size="small"
-          onChange={(_, v: 'day' | 'month' | null) => v && setBucket(v)}
-        >
-          <ToggleButton value="day">Day</ToggleButton>
-          <ToggleButton value="month">Month</ToggleButton>
-        </ToggleButtonGroup>
-        <SeriesCheckbox
-          color={DEBIT_COLOR}
-          label="Debit"
-          checked={showDebit}
-          onChange={setShowDebit}
-        />
-        <SeriesCheckbox
-          color={CREDIT_COLOR}
-          label="Credit"
-          checked={showCredit}
-          onChange={setShowCredit}
-        />
-      </Stack>
+    <>
+      <Box>
+        <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: 'center' }}>
+          <ToggleButtonGroup
+            value={bucket}
+            exclusive
+            size="small"
+            onChange={(_, v: 'day' | 'month' | null) => v && setBucket(v)}
+          >
+            <ToggleButton value="day">Day</ToggleButton>
+            <ToggleButton value="month">Month</ToggleButton>
+          </ToggleButtonGroup>
+          <SeriesCheckbox
+            color={DEBIT_COLOR}
+            label="Debit"
+            checked={showDebit}
+            onChange={setShowDebit}
+          />
+          <SeriesCheckbox
+            color={CREDIT_COLOR}
+            label="Credit"
+            checked={showCredit}
+            onChange={setShowCredit}
+          />
+        </Stack>
 
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-          <CircularProgress />
-        </Box>
-      ) : error ? (
-        <Alert severity="error">{error}</Alert>
-      ) : items.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          No dated transactions in the selected range.
-        </Typography>
-      ) : series.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          Select at least one series to display.
-        </Typography>
-      ) : (
-        <Box ref={scrollRef} sx={{ overflowX: 'auto', overflowY: 'hidden' }}>
-          <Box sx={{ width: chartWidth, position: 'relative' }}>
-            <BarChart
-              height={CHART_HEIGHT}
-              width={chartWidth}
-              hideLegend
-              xAxis={[
-                {
-                  data: items.map((d) => d.period),
-                  scaleType: 'band',
-                  tickLabelStyle: { fontSize: 11 },
-                  categoryGapRatio: 0.3,
-                  barGapRatio: 0.1,
-                },
-              ]}
-              series={series}
-              margin={{ left: LEFT_MARGIN, right: RIGHT_MARGIN, top: 8, bottom: 28 }}
-              slots={{ tooltip: tooltipSlot }}
-            >
-              {boundaries.map((b) => (
-                <ChartsReferenceLine
-                  key={b.period}
-                  x={b.period}
-                  label={monthLabel(b.period)}
-                  labelAlign="start"
-                  lineStyle={{ stroke: '#9e9e9e', strokeDasharray: '4 4', strokeWidth: 1 }}
-                  labelStyle={{ fontSize: 11, fill: '#616161' }}
-                />
-              ))}
-            </BarChart>
-            {hoveredPeriod && bandIndex >= 0 && (
-              <Paper
-                elevation={6}
-                onMouseEnter={cancelClose}
-                onMouseLeave={scheduleClose}
-                sx={{
-                  position: 'absolute',
-                  top: 8,
-                  left: paperLeft,
-                  width: PAPER_WIDTH,
-                  maxHeight: CHART_HEIGHT - 16,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden',
-                  zIndex: 10,
-                }}
-              >
-                <TimelineTooltipContent
-                  period={hoveredPeriod}
-                  bucket={bucket}
-                  transactions={txnsByPeriod.get(hoveredPeriod) ?? []}
-                />
-              </Paper>
-            )}
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+            <CircularProgress />
           </Box>
-        </Box>
-      )}
-    </Box>
+        ) : error ? (
+          <Alert severity="error">{error}</Alert>
+        ) : items.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No dated transactions in the selected range.
+          </Typography>
+        ) : series.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            Select at least one series to display.
+          </Typography>
+        ) : (
+          <Box ref={scrollRef} sx={{ overflowX: 'auto', overflowY: 'hidden' }}>
+            <Box sx={{ width: chartWidth }}>
+              <BarChart
+                height={CHART_HEIGHT}
+                width={chartWidth}
+                hideLegend
+                onAxisClick={(_event, data) => {
+                  if (data && typeof data.axisValue === 'string') {
+                    setSelectedPeriod(data.axisValue)
+                  }
+                }}
+                xAxis={[
+                  {
+                    data: items.map((d) => d.period),
+                    scaleType: 'band',
+                    tickLabelStyle: { fontSize: 11 },
+                    categoryGapRatio: 0.3,
+                    barGapRatio: 0.1,
+                  },
+                ]}
+                series={series}
+                margin={{ left: LEFT_MARGIN, right: RIGHT_MARGIN, top: 8, bottom: 28 }}
+                slotProps={{ tooltip: { trigger: 'none' } }}
+                sx={{ cursor: 'pointer' }}
+              >
+                {boundaries.map((b) => (
+                  <ChartsReferenceLine
+                    key={b.period}
+                    x={b.period}
+                    label={monthLabel(b.period)}
+                    labelAlign="start"
+                    lineStyle={{ stroke: '#9e9e9e', strokeDasharray: '4 4', strokeWidth: 1 }}
+                    labelStyle={{ fontSize: 11, fill: '#616161' }}
+                  />
+                ))}
+              </BarChart>
+            </Box>
+          </Box>
+        )}
+      </Box>
+      {panel && panelTarget ? createPortal(panel, panelTarget) : null}
+    </>
   )
-}
-
-function AxisHoverReader({
-  callbackRef,
-}: {
-  callbackRef: React.RefObject<(period: string | null) => void>
-}) {
-  const axes = useAxesTooltip()
-  const period = axes && axes.length > 0 ? String(axes[0].axisValue) : null
-  useEffect(() => {
-    callbackRef.current?.(period)
-  }, [period, callbackRef])
-  useEffect(() => {
-    return () => {
-      callbackRef.current?.(null)
-    }
-  }, [callbackRef])
-  return null
 }
 
 function SeriesCheckbox({
@@ -339,14 +284,18 @@ function SeriesCheckbox({
   )
 }
 
-function TimelineTooltipContent({
+function TimelineDetails({
   period,
   bucket,
   transactions,
+  onClose,
+  onTransactionClick,
 }: {
   period: string
   bucket: 'day' | 'month'
   transactions: Transaction[]
+  onClose: () => void
+  onTransactionClick: (t: Transaction) => void
 }) {
   let debitTotal = 0
   let creditTotal = 0
@@ -355,26 +304,43 @@ function TimelineTooltipContent({
     if (t.credit !== null) creditTotal += t.credit
   }
 
+  const { debits, credits } = useMemo(() => {
+    const debits: Transaction[] = []
+    const credits: Transaction[] = []
+    for (const t of transactions) {
+      if (t.debit !== null) debits.push(t)
+      else if (t.credit !== null) credits.push(t)
+    }
+    debits.sort((a, b) => (b.debit ?? 0) - (a.debit ?? 0))
+    credits.sort((a, b) => (b.credit ?? 0) - (a.credit ?? 0))
+    return { debits, credits }
+  }, [transactions])
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
-      <Box sx={{ p: 1.5, pb: 1 }}>
-        <Typography variant="subtitle2">
-          {period} · {transactions.length} {transactions.length === 1 ? 'transaction' : 'transactions'}
-        </Typography>
-        {(debitTotal > 0 || creditTotal > 0) && (
-          <Stack direction="row" spacing={2} sx={{ mt: 0.5 }}>
-            {debitTotal > 0 && (
-              <Typography variant="body2" sx={{ color: DEBIT_COLOR }}>
-                Debit {amountFmt.format(debitTotal)}
-              </Typography>
-            )}
-            {creditTotal > 0 && (
-              <Typography variant="body2" sx={{ color: CREDIT_COLOR }}>
-                Credit {amountFmt.format(creditTotal)}
-              </Typography>
-            )}
-          </Stack>
-        )}
+      <Box sx={{ px: 1.5, pt: 1, pb: 1, display: 'flex', alignItems: 'flex-start' }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="subtitle2">
+            {period} · {transactions.length} {transactions.length === 1 ? 'transaction' : 'transactions'}
+          </Typography>
+          {(debitTotal > 0 || creditTotal > 0) && (
+            <Stack direction="row" spacing={2} sx={{ mt: 0.5 }}>
+              {debitTotal > 0 && (
+                <Typography variant="body2" sx={{ color: DEBIT_COLOR }}>
+                  Debit {amountFmt.format(debitTotal)}
+                </Typography>
+              )}
+              {creditTotal > 0 && (
+                <Typography variant="body2" sx={{ color: CREDIT_COLOR }}>
+                  Credit {amountFmt.format(creditTotal)}
+                </Typography>
+              )}
+            </Stack>
+          )}
+        </Box>
+        <IconButton size="small" onClick={onClose} aria-label="Close" sx={{ ml: 1 }}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
       </Box>
       {transactions.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ px: 1.5, pb: 1.5 }}>
@@ -382,48 +348,115 @@ function TimelineTooltipContent({
         </Typography>
       ) : (
         <Box sx={{ overflow: 'auto', flex: 1 }}>
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                {bucket === 'month' && <TableCell sx={{ py: 0.5 }}>Date</TableCell>}
-                <TableCell sx={{ py: 0.5 }}>Description</TableCell>
-                <TableCell sx={{ py: 0.5 }} align="right">Amount</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {transactions.map((t, i) => {
-                const amount = t.debit !== null ? t.debit : t.credit !== null ? t.credit : null
-                const color = t.debit !== null ? DEBIT_COLOR : t.credit !== null ? CREDIT_COLOR : 'inherit'
-                return (
-                  <TableRow key={i}>
-                    {bucket === 'month' && (
-                      <TableCell sx={{ py: 0.5, whiteSpace: 'nowrap' }}>{t.date.slice(5)}</TableCell>
-                    )}
-                    <TableCell
-                      sx={{
-                        py: 0.5,
-                        maxWidth: 240,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                      title={t.description}
-                    >
-                      {t.description || '—'}
-                    </TableCell>
-                    <TableCell
-                      align="right"
-                      sx={{ py: 0.5, color, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
-                    >
-                      {amount !== null ? amountFmt.format(amount) : ''}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+          {credits.length > 0 && (
+            <TransactionGroup
+              label="Credit"
+              color={CREDIT_COLOR}
+              bucket={bucket}
+              transactions={credits}
+              kind="credit"
+              onTransactionClick={onTransactionClick}
+            />
+          )}
+          {debits.length > 0 && (
+            <TransactionGroup
+              label="Debit"
+              color={DEBIT_COLOR}
+              bucket={bucket}
+              transactions={debits}
+              kind="debit"
+              onTransactionClick={onTransactionClick}
+            />
+          )}
         </Box>
       )}
+    </Box>
+  )
+}
+
+function TransactionGroup({
+  label,
+  color,
+  bucket,
+  transactions,
+  kind,
+  onTransactionClick,
+}: {
+  label: string
+  color: string
+  bucket: 'day' | 'month'
+  transactions: Transaction[]
+  kind: 'debit' | 'credit'
+  onTransactionClick: (t: Transaction) => void
+}) {
+  const total = transactions.reduce((acc, t) => acc + (kind === 'debit' ? t.debit ?? 0 : t.credit ?? 0), 0)
+  return (
+    <Box>
+      <Box
+        sx={{
+          px: 1.5,
+          py: 0.5,
+          bgcolor: kind === 'debit' ? '#fdecea' : '#edf7ed',
+          borderTop: 1,
+          borderBottom: 1,
+          borderColor: 'divider',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1,
+        }}
+      >
+        <Typography variant="caption" sx={{ color, fontWeight: 600 }}>
+          {label} · {transactions.length}
+        </Typography>
+        <Typography
+          variant="caption"
+          sx={{ color, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}
+        >
+          {amountFmt.format(total)}
+        </Typography>
+      </Box>
+      <Table size="small">
+        <TableBody>
+          {transactions.map((t, i) => {
+            const amount = kind === 'debit' ? t.debit : t.credit
+            return (
+              <TableRow
+                key={i}
+                hover
+                onClick={() => onTransactionClick(t)}
+                sx={{ cursor: 'pointer' }}
+              >
+                {bucket === 'month' && (
+                  <TableCell sx={{ py: 0.5, whiteSpace: 'nowrap', width: 48 }}>
+                    {t.date.slice(5)}
+                  </TableCell>
+                )}
+                <TableCell
+                  sx={{
+                    py: 0.5,
+                    maxWidth: 240,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={t.description}
+                >
+                  {t.description || '—'}
+                </TableCell>
+                <TableCell
+                  align="right"
+                  sx={{ py: 0.5, color, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
+                >
+                  {amount !== null ? amountFmt.format(amount) : ''}
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
     </Box>
   )
 }

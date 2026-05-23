@@ -3,7 +3,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-SERVER_DIR = Path(__file__).resolve().parent
+SERVER_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(SERVER_DIR / ".env")
 
 _data_dir = os.getenv("DATA_DIR", "./data")

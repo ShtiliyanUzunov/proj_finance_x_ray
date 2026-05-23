@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Box, Typography, Paper, Stack, TextField, Chip, Alert, Button, Tabs, Tab } from '@mui/material'
 import { getSummary, type Summary } from '../api'
 import Timeline, { type TimelineMeta } from './visualizations/Timeline'
@@ -12,6 +12,20 @@ export default function Visualization() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState(0)
   const [timelineMeta, setTimelineMeta] = useState<TimelineMeta | null>(null)
+  const [timelinePanelEl, setTimelinePanelEl] = useState<HTMLDivElement | null>(null)
+  const leftSideRef = useRef<HTMLDivElement>(null)
+  const [leftSideHeight, setLeftSideHeight] = useState<number | null>(null)
+
+  useEffect(() => {
+    const el = leftSideRef.current
+    if (!el) return
+    setLeftSideHeight(el.offsetHeight)
+    const ro = new ResizeObserver(([entry]) => {
+      setLeftSideHeight(entry.contentRect.height)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [available, tab])
 
   useEffect(() => {
     setLoading(true)
@@ -57,8 +71,8 @@ export default function Visualization() {
         ) : (
           <Stack spacing={2}>
             <Typography variant="body2" color="text.secondary">
-              Data available from <strong>{available.min}</strong> to <strong>{available.max}</strong>
-              {summary && ` · ${summary.files} ${summary.files === 1 ? 'file' : 'files'} · ${summary.total_rows} rows total`}
+              <strong>{available.min}</strong> to <strong>{available.max}</strong>
+              {summary && ` · ${summary.files} ${summary.files === 1 ? 'file' : 'files'} · ${summary.total_rows} transactions total`}
             </Typography>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
@@ -105,7 +119,7 @@ export default function Visualization() {
                 <Chip
                   color="primary"
                   variant="outlined"
-                  label={`${summary.matching_rows.toLocaleString()} ${summary.matching_rows === 1 ? 'row' : 'rows'} will be visualized`}
+                  label={`${summary.matching_rows.toLocaleString()} ${summary.matching_rows === 1 ? 'transaction' : 'transactions'}`}
                 />
               )}
             </Stack>
@@ -113,18 +127,35 @@ export default function Visualization() {
         )}
       </Paper>
 
-      <Paper variant="outlined">
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
-          <Tab label="Timeline" />
-        </Tabs>
-        <Box sx={{ p: 2 }}>
-          {tab === 0 && available && <Timeline from={from} to={to} onMeta={setTimelineMeta} />}
-          {tab === 0 && !available && (
-            <Typography variant="body2" color="text.secondary">
-              Upload a CSV with a date column to see the timeline.
-            </Typography>
-          )}
+      <Paper variant="outlined" sx={{ display: 'flex', alignItems: 'stretch', overflow: 'hidden' }}>
+        <Box ref={leftSideRef} sx={{ flex: 1, minWidth: 0 }}>
+          <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
+            <Tab label="Timeline" />
+          </Tabs>
+          <Box sx={{ p: 2 }}>
+            {tab === 0 && available && (
+              <Timeline
+                from={from}
+                to={to}
+                onMeta={setTimelineMeta}
+                panelTarget={timelinePanelEl}
+              />
+            )}
+            {tab === 0 && !available && (
+              <Typography variant="body2" color="text.secondary">
+                Upload a CSV with a date column to see the timeline.
+              </Typography>
+            )}
+          </Box>
         </Box>
+        <Box
+          ref={setTimelinePanelEl}
+          sx={{
+            display: 'flex',
+            maxHeight: leftSideHeight ?? undefined,
+            overflow: 'hidden',
+          }}
+        />
       </Paper>
     </Box>
   )

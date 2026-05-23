@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Box,
   Typography,
@@ -97,6 +97,8 @@ function writeHiddenFor(file: string, hidden: string[]) {
 export default function Inspection() {
   const { name: nameParam } = useParams<{ name: string }>()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const rowParam = searchParams.get('row')
   const [files, setFiles] = useState<CsvFile[]>([])
   const [contents, setContents] = useState<CsvContents | null>(null)
   const [loading, setLoading] = useState(false)
@@ -108,6 +110,8 @@ export default function Inspection() {
   const [colMenuAnchor, setColMenuAnchor] = useState<HTMLElement | null>(null)
   const [sortCol, setSortCol] = useState<number | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [highlightedRow, setHighlightedRow] = useState<number | null>(null)
+  const highlightedRowRef = useRef<HTMLTableRowElement | null>(null)
 
   const selected = nameParam ?? ''
 
@@ -146,6 +150,39 @@ export default function Inspection() {
     setSortCol(null)
     setSortDir('asc')
   }, [selected])
+
+  // Jump to a specific row when ?row= is present: reset filter/sort, page to it, highlight it.
+  useEffect(() => {
+    if (!contents || rowParam === null) return
+    const idx = parseInt(rowParam, 10)
+    if (Number.isNaN(idx) || idx < 0 || idx >= contents.rows.length) return
+    setSearch('')
+    setSortCol(null)
+    setSortDir('asc')
+    setPage(Math.floor(idx / perPage))
+    setHighlightedRow(idx)
+  }, [contents, rowParam, perPage])
+
+  // Scroll the highlighted row into view once it has rendered.
+  useEffect(() => {
+    if (highlightedRow === null) return
+    const el = highlightedRowRef.current
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [highlightedRow, page])
+
+  // Clear highlight + query param after a few seconds so it doesn't stick around.
+  useEffect(() => {
+    if (highlightedRow === null) return
+    const t = window.setTimeout(() => {
+      setHighlightedRow(null)
+      if (searchParams.has('row')) {
+        const next = new URLSearchParams(searchParams)
+        next.delete('row')
+        setSearchParams(next, { replace: true })
+      }
+    }, 4000)
+    return () => clearTimeout(t)
+  }, [highlightedRow, searchParams, setSearchParams])
 
   const cleanedRows = useMemo(
     () => (contents ? contents.rows.map((row) => row.map(cleanCell)) : []),
@@ -388,8 +425,16 @@ export default function Inspection() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {paginated.map((row, i) => (
-                  <TableRow key={page * perPage + i} hover>
+                {paginated.map((row, i) => {
+                  const originalIdx = page * perPage + i
+                  const isHighlighted = sortCol === null && !search.trim() && originalIdx === highlightedRow
+                  return (
+                  <TableRow
+                    key={originalIdx}
+                    hover
+                    ref={isHighlighted ? highlightedRowRef : undefined}
+                    sx={isHighlighted ? { bgcolor: '#fff8e1', transition: 'background-color 0.3s' } : undefined}
+                  >
                     {visibleIndexes.map((idx) => {
                       const isDebit = semanticCols.debit.has(idx)
                       const isCredit = semanticCols.credit.has(idx)
@@ -410,7 +455,8 @@ export default function Inspection() {
                       )
                     })}
                   </TableRow>
-                ))}
+                  )
+                })}
               </TableBody>
             </Table>
           </TableContainer>

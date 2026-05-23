@@ -41,6 +41,37 @@ export function getCsv(name: string): Promise<CsvContents> {
   return fetch(`${API_BASE}/csv/${encodeURIComponent(name)}`).then(handle<CsvContents>)
 }
 
+export interface Schema {
+  columns: string[]
+}
+
+export function getSchema(): Promise<Schema> {
+  return fetch(`${API_BASE}/schema`).then(handle<Schema>)
+}
+
+export interface Rule {
+  id: string
+  category: string
+  columns: string[]
+  keywords: string[]
+}
+
+export interface RulesPayload {
+  rules: Rule[]
+}
+
+export function getRules(): Promise<RulesPayload> {
+  return fetch(`${API_BASE}/rules`).then(handle<RulesPayload>)
+}
+
+export function putRules(rules: Rule[]): Promise<RulesPayload> {
+  return fetch(`${API_BASE}/rules`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rules }),
+  }).then(handle<RulesPayload>)
+}
+
 export function uploadCsv(file: File): Promise<CsvFile> {
   const form = new FormData()
   form.append('file', file)
@@ -72,6 +103,7 @@ export interface Transaction {
   debit: number | null
   credit: number | null
   source: string
+  row_index: number
 }
 
 export function getTransactions(from?: string, to?: string): Promise<Transaction[]> {
