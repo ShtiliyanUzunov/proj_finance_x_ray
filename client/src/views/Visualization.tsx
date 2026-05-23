@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Box, Typography, Paper, Stack, TextField, Chip, Alert, Button, Tabs, Tab } from '@mui/material'
 import { getSummary, type Summary } from '../api'
 import Timeline, { type TimelineMeta } from './visualizations/Timeline'
+import Overview from './visualizations/Overview'
 
 export default function Visualization() {
   const [summary, setSummary] = useState<Summary | null>(null)
@@ -54,7 +55,7 @@ export default function Visualization() {
     available !== null && (from !== available.min || to !== available.max)
 
   return (
-    <Box>
+    <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', pr: 1 }}>
       <Typography variant="h4" gutterBottom>
         Visualizations
       </Typography>
@@ -131,6 +132,7 @@ export default function Visualization() {
         <Box ref={leftSideRef} sx={{ flex: 1, minWidth: 0 }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
             <Tab label="Timeline" />
+            <Tab label="Overview" />
           </Tabs>
           <Box sx={{ p: 2 }}>
             {tab === 0 && available && (
@@ -141,9 +143,12 @@ export default function Visualization() {
                 panelTarget={timelinePanelEl}
               />
             )}
-            {tab === 0 && !available && (
+            {tab === 1 && available && (
+              <Overview from={from} to={to} panelTarget={timelinePanelEl} />
+            )}
+            {!available && (
               <Typography variant="body2" color="text.secondary">
-                Upload a CSV with a date column to see the timeline.
+                Upload a CSV with a date column to see visualizations.
               </Typography>
             )}
           </Box>

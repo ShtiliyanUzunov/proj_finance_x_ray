@@ -1,23 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
-  Box,
-  Typography,
-  Paper,
-  Stack,
-  Chip,
-  Button,
-  TextField,
-  IconButton,
-  Autocomplete,
-  Divider,
-  Tooltip,
   Alert,
+  Autocomplete,
+  Badge,
+  Box,
+  Button,
+  Checkbox,
+  Chip,
   CircularProgress,
   Collapse,
-  Tabs,
+  Divider,
+  FormControl,
+  IconButton,
+  ListItemText,
+  MenuItem,
+  Paper,
+  Popover,
+  Select,
+  Stack,
   Tab,
-  Badge,
+  Tabs,
+  TextField,
+  Tooltip,
+  Typography,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -99,7 +105,6 @@ export default function Categorization() {
   const [categoryDraft, setCategoryDraft] = useState('')
   // Set true momentarily on Escape so the imminent blur knows to skip the commit.
   const cancelCategoryEditRef = useRef(false)
-  const [keywordDraftByRule, setKeywordDraftByRule] = useState<Record<string, string>>({})
 
   // Which tab is active
   const [tab, setTab] = useState<'rules' | 'groups'>('rules')
@@ -232,22 +237,8 @@ export default function Categorization() {
     setCategoryDraft('')
   }
 
-  function addColumnToRule(id: string, column: string) {
-    persistRules(
-      rules.map((r) =>
-        r.id === id && !r.columns.includes(column)
-          ? { ...r, columns: [...r.columns, column] }
-          : r,
-      ),
-    )
-  }
-
-  function removeColumnFromRule(id: string, column: string) {
-    persistRules(
-      rules.map((r) =>
-        r.id === id ? { ...r, columns: r.columns.filter((c) => c !== column) } : r,
-      ),
-    )
+  function updateRuleColumns(id: string, columns: string[]) {
+    persistRules(rules.map((r) => (r.id === id ? { ...r, columns } : r)))
   }
 
   function addKeywordToRule(id: string, keyword: string) {
@@ -260,7 +251,6 @@ export default function Categorization() {
           : r,
       ),
     )
-    setKeywordDraftByRule((prev) => ({ ...prev, [id]: '' }))
   }
 
   function removeRule(id: string) {
@@ -307,6 +297,15 @@ export default function Categorization() {
 
   const groupNames = useMemo(() => groups.map((g) => g.name), [groups])
 
+  // Names already referenced as a child in some group. The "add child" pickers
+  // exclude these so the user only sees leaves/groups that aren't yet placed
+  // anywhere — keeps the option list focused on real candidates.
+  const usedChildren = useMemo(() => {
+    const s = new Set<string>()
+    for (const g of groups) for (const c of g.children) s.add(c)
+    return s
+  }, [groups])
+
   // Map leaf category → color from the first rule that defines it. Used to
   // tint group child chips so groups visually inherit their leaves' colors.
   const colorByCategory = useMemo(() => {
@@ -319,15 +318,10 @@ export default function Categorization() {
 
   // What names are valid as a group's children: every leaf category + every
   // other group (groups can nest other groups).
-  const childOptionsForNew = useMemo(() => {
-    const trimmed = groupName.trim()
-    return Array.from(
-      new Set([
-        ...existingCategories,
-        ...groupNames.filter((n) => n !== trimmed),
-      ]),
-    ).sort()
-  }, [existingCategories, groupNames, groupName])
+  const childOptionsForNew = useMemo(
+    () => existingCategories.filter((opt) => !usedChildren.has(opt)).sort(),
+    [existingCategories, usedChildren],
+  )
 
   // A child reference is a "ghost" if it doesn't resolve to a leaf or another
   // group. Typically happens when a rule is deleted after a group was set up.
@@ -617,7 +611,7 @@ export default function Categorization() {
                     {i + 1}
                   </Typography>
                 </Box>
-                <Box sx={{ minWidth: 240 }}>
+                <Box sx={{ width: 280, flexShrink: 0 }}>
                   <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                     <Tooltip title="Change color">
                       <input
@@ -679,78 +673,60 @@ export default function Categorization() {
                       </Tooltip>
                     )}
                   </Stack>
-                  <Stack
-                    direction="row"
-                    spacing={0.5}
-                    flexWrap="wrap"
-                    useFlexGap
-                    sx={{ mt: 0.75, alignItems: 'center' }}
-                  >
-                    <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+                  <Box sx={{ mt: 0.75, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Typography variant="caption" color="text.secondary">
                       on
                     </Typography>
-                    {rule.columns.map((col) => (
-                      <Chip
-                        key={col}
-                        label={col}
-                        size="small"
-                        variant="outlined"
-                        onDelete={() => removeColumnFromRule(rule.id, col)}
-                      />
-                    ))}
-                    {availableColumns.filter((c) => !rule.columns.includes(c)).length > 0 && (
-                      <Autocomplete
-                        size="small"
-                        options={availableColumns.filter((c) => !rule.columns.includes(c))}
-                        value={null}
-                        blurOnSelect
-                        onChange={(_, v) => v && addColumnToRule(rule.id, v)}
-                        sx={{ minWidth: 160 }}
-                        renderInput={(params) => (
-                          <TextField {...params} placeholder="+ add column" variant="standard" />
-                        )}
-                      />
-                    )}
-                  </Stack>
+                    <FormControl size="small" variant="standard" sx={{ flex: 1, minWidth: 0 }}>
+                      <Select
+                        multiple
+                        displayEmpty
+                        value={rule.columns}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          updateRuleColumns(rule.id, typeof v === 'string' ? v.split(',') : v)
+                        }}
+                        disabled={availableColumns.length === 0}
+                        renderValue={(selected) =>
+                          selected.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary">
+                              (no columns)
+                            </Typography>
+                          ) : (
+                            <Box
+                              sx={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                fontSize: '0.875rem',
+                              }}
+                              title={selected.join(', ')}
+                            >
+                              {selected.length} · {selected.join(', ')}
+                            </Box>
+                          )
+                        }
+                      >
+                        {availableColumns.map((col) => (
+                          <MenuItem key={col} value={col} dense>
+                            <Checkbox
+                              checked={rule.columns.includes(col)}
+                              size="small"
+                              sx={{ p: 0.5 }}
+                            />
+                            <ListItemText primary={col} />
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
                 </Box>
-                <Stack
-                  direction="row"
-                  spacing={0.5}
-                  flexWrap="wrap"
-                  useFlexGap
-                  sx={{ flex: 1, alignItems: 'center' }}
-                >
-                  {rule.keywords.map((k) => (
-                    <Chip
-                      key={k}
-                      label={k}
-                      size="small"
-                      variant="outlined"
-                      onDelete={() => removeKeywordFromRule(rule.id, k)}
-                    />
-                  ))}
-                  <TextField
-                    size="small"
-                    variant="standard"
-                    placeholder="+ add keyword"
-                    value={keywordDraftByRule[rule.id] ?? ''}
-                    onChange={(e) =>
-                      setKeywordDraftByRule((prev) => ({ ...prev, [rule.id]: e.target.value }))
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ',') {
-                        e.preventDefault()
-                        addKeywordToRule(rule.id, keywordDraftByRule[rule.id] ?? '')
-                      }
-                    }}
-                    onBlur={() => {
-                      const v = keywordDraftByRule[rule.id]
-                      if (v && v.trim()) addKeywordToRule(rule.id, v)
-                    }}
-                    sx={{ minWidth: 140 }}
-                  />
-                </Stack>
-                <Stack direction="row">
+                <KeywordEditor
+                  keywords={rule.keywords}
+                  onAdd={(k) => addKeywordToRule(rule.id, k)}
+                  onRemove={(k) => removeKeywordFromRule(rule.id, k)}
+                />
+                <Stack direction="row" sx={{ ml: 'auto' }}>
                   <Tooltip title="Move up">
                     <span>
                       <IconButton size="small" disabled={i === 0} onClick={() => moveRule(rule.id, -1)}>
@@ -804,8 +780,7 @@ export default function Categorization() {
           Add group
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-          A group bundles leaf categories or other groups for reporting. No rules attach to a group
-          directly.
+          A group bundles leaf categories for reporting. No rules attach to a group directly.
         </Typography>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
           <TextField
@@ -832,7 +807,7 @@ export default function Categorization() {
             renderInput={(params) => (
               <TextField
                 {...params}
-                label="Children (leaves or groups)"
+                label="Children (categories)"
                 size="small"
                 placeholder={
                   childOptionsForNew.length === 0
@@ -877,13 +852,8 @@ export default function Categorization() {
         ) : (
           <Stack divider={<Divider flexItem />}>
             {groups.map((g) => {
-              const childOptions = Array.from(
-                new Set([
-                  ...existingCategories,
-                  ...groupNames.filter((n) => n !== g.name),
-                ]),
-              )
-                .filter((opt) => !g.children.includes(opt))
+              const childOptions = existingCategories
+                .filter((opt) => !usedChildren.has(opt))
                 .sort()
               return (
                 <Stack
@@ -962,5 +932,78 @@ export default function Categorization() {
         </>
       )}
     </Box>
+  )
+}
+
+function KeywordEditor({
+  keywords,
+  onAdd,
+  onRemove,
+}: {
+  keywords: string[]
+  onAdd: (k: string) => void
+  onRemove: (k: string) => void
+}) {
+  const [draft, setDraft] = useState('')
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
+
+  function commit() {
+    const v = draft.trim()
+    if (v) onAdd(v)
+    setDraft('')
+  }
+
+  return (
+    <Stack
+      direction="row"
+      spacing={1}
+      sx={{ alignItems: 'center', width: 280, flexShrink: 0 }}
+    >
+      <TextField
+        size="small"
+        variant="standard"
+        placeholder="+ add keyword"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault()
+            commit()
+          }
+        }}
+        onBlur={commit}
+        sx={{ flex: 1, minWidth: 140 }}
+      />
+      <Button
+        size="small"
+        variant="text"
+        onClick={(e) => setAnchorEl(e.currentTarget)}
+        disabled={keywords.length === 0}
+        sx={{ textTransform: 'none', whiteSpace: 'nowrap', minWidth: 0 }}
+      >
+        {keywords.length} {keywords.length === 1 ? 'keyword' : 'keywords'}
+      </Button>
+      <Popover
+        open={Boolean(anchorEl)}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Box sx={{ p: 1.5, maxWidth: 480 }}>
+          <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            {keywords.map((k) => (
+              <Chip
+                key={k}
+                label={k}
+                size="small"
+                variant="outlined"
+                onDelete={() => onRemove(k)}
+              />
+            ))}
+          </Stack>
+        </Box>
+      </Popover>
+    </Stack>
   )
 }

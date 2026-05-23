@@ -13,6 +13,19 @@
     "color": "#e72323"
   },
   {
+    "id": "6smhjc88",
+    "category": "Billa",
+    "columns": [
+      "Наредител/Получател",
+      "Основание",
+      "Номер сметка на наредителя / получателя"
+    ],
+    "keywords": [
+      "bgr sofia billa"
+    ],
+    "color": "#dc0909"
+  },
+  {
     "id": "cid264cf",
     "category": "LIDL",
     "columns": [
@@ -61,5 +74,113 @@
       "доротея георгиева воева"
     ],
     "color": "#273144"
+  },
+  {
+    "id": "fqbri60m",
+    "category": "DSK_Loan",
+    "columns": [
+      "Основание",
+      "Наредител/Получател",
+      "Номер сметка на наредителя / получателя"
+    ],
+    "keywords": [
+      "плащане по заем към rl"
+    ],
+    "color": "#e4cc2f"
+  },
+  {
+    "id": "dbuvsiw2",
+    "category": "Remont-Varna",
+    "columns": [
+      "Основание",
+      "Наредител/Получател",
+      "Номер сметка на наредителя / получателя"
+    ],
+    "keywords": [
+      "zhivko lipchev",
+      "ремонт варна",
+      "хармония тм"
+    ],
+    "color": "#70296a"
+  },
+  {
+    "id": "ndvnxlxv",
+    "category": "Garage_rental",
+    "columns": [
+      "Наредител/Получател"
+    ],
+    "keywords": [
+      "dimtar grigorov bakalov"
+    ],
+    "color": "#b0e51f"
+  },
+  {
+    "id": "tqan1u7m",
+    "category": "BMS",
+    "columns": [
+      "Наредител/Получател"
+    ],
+    "keywords": [
+      "bms"
+    ],
+    "color": "#f21c0d"
+  },
+  {
+    "id": "h01xbwrt",
+    "category": "Nablizo",
+    "columns": [
+      "Основание",
+      "Наредител/Получател",
+      "Номер сметка на наредителя / получателя"
+    ],
+    "keywords": [
+      "market nablizo"
+    ],
+    "color": "#d31212"
+  },
+  {
+    "id": "tqvrd7pi",
+    "category": "Bills",
+    "columns": [
+      "Основание",
+      "Наредител/Получател",
+      "Номер сметка на наредителя / получателя"
+    ],
+    "keywords": [
+      "електрохолд продажби ад",
+      "вик софийска вода - ел.канали и каса",
+      "a1 аб.план",
+      "овергаз",
+      "комунални разходи ел. канали"
+    ],
+    "color": "#000000"
+  },
+  {
+    "id": "ph6s8tf3",
+    "category": "Fuel",
+    "columns": [
+      "Наредител/Получател"
+    ],
+    "keywords": [
+      "shell",
+      "omv"
+    ],
+    "color": "#59b1a2"
+  },
+  {
+    "id": "g5mttzqy",
+    "category": "Home",
+    "columns": [
+      "Наредител/Получател"
+    ],
+    "keywords": [
+      "dm bulgaria",
+      "pepco",
+      "pepko",
+      "ikea",
+      "tehnomarket",
+      "jysk"
+    ],
+    "color": "#3f1008"
   }
 ]

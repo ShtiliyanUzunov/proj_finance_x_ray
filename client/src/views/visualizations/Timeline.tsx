@@ -8,21 +8,15 @@ import {
   CircularProgress,
   FormControl,
   FormControlLabel,
-  IconButton,
   InputLabel,
   ListSubheader,
   MenuItem,
   Select,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
-import CloseIcon from '@mui/icons-material/Close'
 import { BarChart } from '@mui/x-charts/BarChart'
 import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine'
 import {
@@ -35,6 +29,10 @@ import {
   type TimelinePoint,
   type Transaction,
 } from '../../api'
+import TransactionDetailsPanel, {
+  CREDIT_COLOR,
+  DEBIT_COLOR,
+} from './TransactionDetailsPanel'
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -74,16 +72,7 @@ const CHART_PADDING = 80
 const CHART_HEIGHT = 420
 const LEFT_MARGIN = 44
 const RIGHT_MARGIN = 8
-const DEBIT_COLOR = '#d32f2f'
-const CREDIT_COLOR = '#2e7d32'
 const PANEL_WIDTH = 440
-
-const amountFmt = new Intl.NumberFormat(undefined, {
-  style: 'currency',
-  currency: 'EUR',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
 
 // Encoded as `cat:<name>` or `group:<name>` so MUI Select can use a flat string value.
 const FILTER_ALL = ''
@@ -263,10 +252,10 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
           borderColor: 'divider',
         }}
       >
-        <TimelineDetails
-          period={selectedPeriod}
-          bucket={bucket}
+        <TransactionDetailsPanel
+          title={selectedPeriod}
           transactions={txnsByPeriod.get(selectedPeriod) ?? []}
+          dateColumn={bucket === 'month' ? 'short' : 'none'}
           onClose={() => setSelectedPeriod(null)}
           onTransactionClick={(t) => {
             navigate(`/inspect/${encodeURIComponent(t.source)}?row=${t.row_index}`)
@@ -416,179 +405,3 @@ function SeriesCheckbox({
   )
 }
 
-function TimelineDetails({
-  period,
-  bucket,
-  transactions,
-  onClose,
-  onTransactionClick,
-}: {
-  period: string
-  bucket: 'day' | 'month'
-  transactions: Transaction[]
-  onClose: () => void
-  onTransactionClick: (t: Transaction) => void
-}) {
-  let debitTotal = 0
-  let creditTotal = 0
-  for (const t of transactions) {
-    if (t.debit !== null) debitTotal += t.debit
-    if (t.credit !== null) creditTotal += t.credit
-  }
-
-  const { debits, credits } = useMemo(() => {
-    const debits: Transaction[] = []
-    const credits: Transaction[] = []
-    for (const t of transactions) {
-      if (t.debit !== null) debits.push(t)
-      else if (t.credit !== null) credits.push(t)
-    }
-    debits.sort((a, b) => (b.debit ?? 0) - (a.debit ?? 0))
-    credits.sort((a, b) => (b.credit ?? 0) - (a.credit ?? 0))
-    return { debits, credits }
-  }, [transactions])
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
-      <Box sx={{ px: 1.5, pt: 1, pb: 1, display: 'flex', alignItems: 'flex-start' }}>
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="subtitle2">
-            {period} · {transactions.length} {transactions.length === 1 ? 'transaction' : 'transactions'}
-          </Typography>
-          {(debitTotal > 0 || creditTotal > 0) && (
-            <Stack direction="row" spacing={2} sx={{ mt: 0.5 }}>
-              {debitTotal > 0 && (
-                <Typography variant="body2" sx={{ color: DEBIT_COLOR }}>
-                  Debit {amountFmt.format(debitTotal)}
-                </Typography>
-              )}
-              {creditTotal > 0 && (
-                <Typography variant="body2" sx={{ color: CREDIT_COLOR }}>
-                  Credit {amountFmt.format(creditTotal)}
-                </Typography>
-              )}
-            </Stack>
-          )}
-        </Box>
-        <IconButton size="small" onClick={onClose} aria-label="Close" sx={{ ml: 1 }}>
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </Box>
-      {transactions.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ px: 1.5, pb: 1.5 }}>
-          No transactions in this period.
-        </Typography>
-      ) : (
-        <Box sx={{ overflow: 'auto', flex: 1 }}>
-          {credits.length > 0 && (
-            <TransactionGroup
-              label="Credit"
-              color={CREDIT_COLOR}
-              bucket={bucket}
-              transactions={credits}
-              kind="credit"
-              onTransactionClick={onTransactionClick}
-            />
-          )}
-          {debits.length > 0 && (
-            <TransactionGroup
-              label="Debit"
-              color={DEBIT_COLOR}
-              bucket={bucket}
-              transactions={debits}
-              kind="debit"
-              onTransactionClick={onTransactionClick}
-            />
-          )}
-        </Box>
-      )}
-    </Box>
-  )
-}
-
-function TransactionGroup({
-  label,
-  color,
-  bucket,
-  transactions,
-  kind,
-  onTransactionClick,
-}: {
-  label: string
-  color: string
-  bucket: 'day' | 'month'
-  transactions: Transaction[]
-  kind: 'debit' | 'credit'
-  onTransactionClick: (t: Transaction) => void
-}) {
-  const total = transactions.reduce((acc, t) => acc + (kind === 'debit' ? t.debit ?? 0 : t.credit ?? 0), 0)
-  return (
-    <Box>
-      <Box
-        sx={{
-          px: 1.5,
-          py: 0.5,
-          bgcolor: kind === 'debit' ? '#fdecea' : '#edf7ed',
-          borderTop: 1,
-          borderBottom: 1,
-          borderColor: 'divider',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          position: 'sticky',
-          top: 0,
-          zIndex: 1,
-        }}
-      >
-        <Typography variant="caption" sx={{ color, fontWeight: 600 }}>
-          {label} · {transactions.length}
-        </Typography>
-        <Typography
-          variant="caption"
-          sx={{ color, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}
-        >
-          {amountFmt.format(total)}
-        </Typography>
-      </Box>
-      <Table size="small">
-        <TableBody>
-          {transactions.map((t, i) => {
-            const amount = kind === 'debit' ? t.debit : t.credit
-            return (
-              <TableRow
-                key={i}
-                hover
-                onClick={() => onTransactionClick(t)}
-                sx={{ cursor: 'pointer' }}
-              >
-                {bucket === 'month' && (
-                  <TableCell sx={{ py: 0.5, whiteSpace: 'nowrap', width: 48 }}>
-                    {t.date.slice(5)}
-                  </TableCell>
-                )}
-                <TableCell
-                  sx={{
-                    py: 0.5,
-                    maxWidth: 240,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                  title={t.description}
-                >
-                  {t.description || '—'}
-                </TableCell>
-                <TableCell
-                  align="right"
-                  sx={{ py: 0.5, color, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
-                >
-                  {amount !== null ? amountFmt.format(amount) : ''}
-                </TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
-    </Box>
-  )
-}

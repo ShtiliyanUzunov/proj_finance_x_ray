@@ -3,7 +3,10 @@
     "name": "Food",
     "children": [
       "FANTASTICO",
-      "LIDL"
+      "LIDL",
+      "Billa",
+      "Nablizo",
+      "BMS"
     ]
   },
   {
@@ -11,6 +14,43 @@
     "children": [
       "HBO",
       "Google"
+    ]
+  },
+  {
+    "name": "Kinder_Garden",
+    "children": [
+      "Kindergarden"
+    ]
+  },
+  {
+    "name": "Loans",
+    "children": [
+      "DSK_Loan",
+      "Garage_rental"
+    ]
+  },
+  {
+    "name": "Occasional",
+    "children": [
+      "Remont-Varna"
+    ]
+  },
+  {
+    "name": "Monthly_bills",
+    "children": [
+      "Bills"
+    ]
+  },
+  {
+    "name": "Car",
+    "children": [
+      "Fuel"
+    ]
+  },
+  {
+    "name": "Home-",
+    "children": [
+      "Home"
     ]
   }
 ]
