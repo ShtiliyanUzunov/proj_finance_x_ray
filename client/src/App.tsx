@@ -28,8 +28,8 @@ const DRAWER_WIDTH = 240
 
 const NAV_ITEMS: { path: string; label: string; icon: React.ReactNode }[] = [
   { path: '/visualization', label: 'Visualizations', icon: <BarChartIcon /> },
-  { path: '/upload', label: 'Upload data', icon: <CloudUploadIcon /> },
-  { path: '/inspection', label: 'Inspect transactions', icon: <TableChartIcon /> },
+  { path: '/data', label: 'Data', icon: <CloudUploadIcon /> },
+  { path: '/inspect', label: 'Inspect', icon: <TableChartIcon /> },
   { path: '/categorization', label: 'Categorization', icon: <LabelIcon /> },
 ]
 
@@ -75,16 +75,28 @@ function App() {
         </Box>
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
         <MuiToolbar />
+        <Box sx={{ flex: 1, minHeight: 0, p: 3, display: 'flex', flexDirection: 'column' }}>
         <Routes>
           <Route path="/" element={<Navigate to="/visualization" replace />} />
           <Route path="/visualization" element={<Visualization />} />
-          <Route path="/upload" element={<Upload />} />
-          <Route path="/inspection" element={<Inspection />} />
+          <Route path="/data" element={<Upload />} />
+          <Route path="/inspect" element={<Inspection />} />
+          <Route path="/inspect/:name" element={<Inspection />} />
           <Route path="/categorization" element={<Categorization />} />
           <Route path="*" element={<Navigate to="/visualization" replace />} />
         </Routes>
+        </Box>
       </Box>
     </Box>
   )
