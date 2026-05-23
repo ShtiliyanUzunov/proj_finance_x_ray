@@ -26,9 +26,12 @@ import {
   Checkbox,
   Divider,
   TableSortLabel,
+  IconButton,
+  Tooltip,
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
 import ViewColumnIcon from '@mui/icons-material/ViewColumn'
+import AddIcon from '@mui/icons-material/Add'
 
 type SortDir = 'asc' | 'desc'
 
@@ -54,7 +57,34 @@ const amountFormatter = new Intl.NumberFormat(undefined, {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 })
-import { listCsvs, getCsv, type CsvFile, type CsvContents } from '../api'
+import {
+  listCsvs,
+  getCsv,
+  getCsvCategories,
+  type CsvFile,
+  type CsvContents,
+} from '../api'
+
+const CATEGORY_COLUMN_LABEL = 'Category'
+const UNCATEGORIZED_LABEL = 'None'
+
+interface RowCategory {
+  category: string | null
+  color: string | null
+}
+
+// Pick legible text color for a given hex background. Same luminance formula
+// as the Categorization view so the color choice stays consistent across
+// places that render rule colors.
+function pickContrastColor(bg: string): string {
+  const hex = bg.replace('#', '')
+  if (hex.length !== 6) return 'rgba(0,0,0,0.87)'
+  const r = parseInt(hex.slice(0, 2), 16) / 255
+  const g = parseInt(hex.slice(2, 4), 16) / 255
+  const b = parseInt(hex.slice(4, 6), 16) / 255
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b
+  return luminance > 0.6 ? 'rgba(0,0,0,0.87)' : '#fff'
+}
 
 const entityDecoder = typeof window !== 'undefined' ? document.createElement('textarea') : null
 
@@ -101,6 +131,7 @@ export default function Inspection() {
   const rowParam = searchParams.get('row')
   const [files, setFiles] = useState<CsvFile[]>([])
   const [contents, setContents] = useState<CsvContents | null>(null)
+  const [categoriesByRow, setCategoriesByRow] = useState<Map<number, RowCategory>>(new Map())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -129,13 +160,21 @@ export default function Inspection() {
   useEffect(() => {
     if (!selected) {
       setContents(null)
+      setCategoriesByRow(new Map())
       return
     }
     setLoading(true)
     setError(null)
     setPage(0)
-    getCsv(selected)
-      .then(setContents)
+    Promise.all([getCsv(selected), getCsvCategories(selected)])
+      .then(([csv, cats]) => {
+        setContents(csv)
+        const map = new Map<number, RowCategory>()
+        for (const c of cats.categories) {
+          map.set(c.row_index, { category: c.category, color: c.color })
+        }
+        setCategoriesByRow(map)
+      })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false))
   }, [selected])
@@ -184,15 +223,36 @@ export default function Inspection() {
     return () => clearTimeout(t)
   }, [highlightedRow, searchParams, setSearchParams])
 
+  // The synthetic Category column is appended to every row + the header so all
+  // existing sort/filter/hide/paginate machinery treats it like any other
+  // column. Color is looked up separately at render time via sourceIndexByRow.
   const cleanedRows = useMemo(
-    () => (contents ? contents.rows.map((row) => row.map(cleanCell)) : []),
-    [contents],
+    () =>
+      contents
+        ? contents.rows.map((row, i) => [
+            ...row.map(cleanCell),
+            categoriesByRow.get(i)?.category ?? UNCATEGORIZED_LABEL,
+          ])
+        : [],
+    [contents, categoriesByRow],
   )
 
   const cleanedColumns = useMemo(
-    () => (contents ? contents.columns.map(cleanCell) : []),
+    () =>
+      contents ? [...contents.columns.map(cleanCell), CATEGORY_COLUMN_LABEL] : [],
     [contents],
   )
+
+  // Reverse map row reference → source CSV index. Needed because sort/filter
+  // re-order rows, so position in the rendered list no longer matches the row
+  // index that categoriesByRow is keyed on.
+  const sourceIndexByRow = useMemo(() => {
+    const m = new Map<string[], number>()
+    cleanedRows.forEach((r, i) => m.set(r, i))
+    return m
+  }, [cleanedRows])
+
+  const categoryColIdx = cleanedColumns.length - 1
 
   const visibleIndexes = useMemo(
     () => cleanedColumns.map((c, i) => (hidden.has(c) ? -1 : i)).filter((i) => i >= 0),
@@ -290,6 +350,19 @@ export default function Inspection() {
     const next = hide ? new Set(cleanedColumns) : new Set<string>()
     setHidden(next)
     writeHiddenFor(selected, Array.from(next))
+  }
+
+  // Bridge to the Categorization view: drop the row's 2nd and 3rd columns
+  // (typically the description and counterparty) into the keyword input *as
+  // draft text*, not as committed chips. The user can then edit and decide
+  // whether to keep them before pressing Enter.
+  function handleCategorize(row: string[]) {
+    const draft = [row[1], row[2]]
+      .filter((s): s is string => typeof s === 'string')
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => s.length > 0)
+      .join(', ')
+    navigate('/categorization', { state: { prefillKeywordDraft: draft } })
   }
 
   return (
@@ -433,13 +506,22 @@ export default function Inspection() {
                     key={originalIdx}
                     hover
                     ref={isHighlighted ? highlightedRowRef : undefined}
-                    sx={isHighlighted ? { bgcolor: '#fff8e1', transition: 'background-color 0.3s' } : undefined}
+                    sx={{
+                      ...(isHighlighted && { bgcolor: '#fff8e1', transition: 'background-color 0.3s' }),
+                      '&:hover .categorize-action': { opacity: 1 },
+                    }}
                   >
                     {visibleIndexes.map((idx) => {
                       const isDebit = semanticCols.debit.has(idx)
                       const isCredit = semanticCols.credit.has(idx)
+                      const isCategory = idx === categoryColIdx
                       const cell = row[idx]
                       const hasValue = isDebit || isCredit ? !Number.isNaN(parseAmount(cell)) : false
+                      const sourceIdx = isCategory ? sourceIndexByRow.get(row) : undefined
+                      const categoryColor =
+                        isCategory && sourceIdx !== undefined
+                          ? categoriesByRow.get(sourceIdx)?.color
+                          : null
                       return (
                         <TableCell
                           key={idx}
@@ -448,9 +530,48 @@ export default function Inspection() {
                             fontVariantNumeric: isDebit || isCredit ? 'tabular-nums' : undefined,
                             ...(isDebit && hasValue && { color: 'error.main', fontWeight: 500 }),
                             ...(isCredit && hasValue && { color: 'success.main', fontWeight: 500 }),
+                            ...(isCategory && categoryColor && {
+                              bgcolor: categoryColor,
+                              color: pickContrastColor(categoryColor),
+                              fontWeight: 500,
+                            }),
+                            ...(isCategory && !categoryColor && {
+                              color: 'text.secondary',
+                              fontStyle: 'italic',
+                            }),
                           }}
                         >
-                          {cell}
+                          {isCategory && !categoryColor ? (
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 1,
+                              }}
+                            >
+                              <span>{cell}</span>
+                              <Tooltip title="Create a rule from this transaction">
+                                <IconButton
+                                  className="categorize-action"
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleCategorize(row)
+                                  }}
+                                  sx={{
+                                    opacity: 0,
+                                    transition: 'opacity 0.15s',
+                                    p: 0.25,
+                                  }}
+                                >
+                                  <AddIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
+                          ) : (
+                            cell
+                          )}
                         </TableCell>
                       )
                     })}

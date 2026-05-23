@@ -59,8 +59,11 @@ Add a new endpoint by dropping a router in `app/routers/` and including it in `a
 - `GET /csv/{name}` — return the CSV as `{name, columns, rows}` (rows are arrays of strings)
 - `PATCH /csv/{name}` — rename a CSV (`{name: "new.csv"}`)
 - `GET /schema` — union of column names across all uploaded CSVs
-- `GET /rules` — list categorization rules
+- `GET /rules` — list categorization rules (each rule defines one leaf category)
 - `PUT /rules` — replace the full rules list
+- `GET /groups` — list category groups (each group bundles leaves and/or other groups; no rules attach to a group)
+- `PUT /groups` — replace the full groups list. Rejects empty names, name collisions with rule categories, and cycles in the group→group reference graph.
 - `GET /summary` — row counts and date range (optional `from`/`to`)
 - `GET /timeline` — debit/credit totals bucketed by `day` or `month`
-- `GET /transactions` — flattened transaction list across all CSVs
+- `GET /transactions` — flattened transaction list across all CSVs, each row tagged with `category` (first matching rule) and `matched_rule_ids`
+- `GET /transactions/conflicts` — only transactions matched by more than one rule, with full per-match detail in `matched_rules`

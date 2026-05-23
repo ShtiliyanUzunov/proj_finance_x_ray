@@ -5,7 +5,9 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from ..models import RenameRequest
+from ..services.categorization import categorize_csv_file
 from ..services.csv_files import file_info, list_files, safe_csv_path, unique_path
+from ..services.rules import load_rule_models
 
 router = APIRouter(tags=["csv"])
 
@@ -55,3 +57,17 @@ def get_csv(name: str):
         return {"name": path.name, "columns": [], "rows": []}
     columns, *data = rows
     return {"name": path.name, "columns": columns, "rows": data}
+
+
+@router.get("/csv/{name}/categories")
+def get_csv_categories(name: str):
+    """Per-row categorization for a single CSV file.
+
+    Returned in source-row order. Row indices are zero-based and align with
+    the indices used by `GET /csv/{name}` (i.e. the position in `rows[]`),
+    so the client can merge by row index without any extra bookkeeping.
+    """
+    path = safe_csv_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return {"categories": categorize_csv_file(path, load_rule_models())}

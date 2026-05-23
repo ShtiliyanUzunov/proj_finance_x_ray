@@ -15,7 +15,7 @@ import {
 import InsightsIcon from '@mui/icons-material/Insights'
 import BarChartIcon from '@mui/icons-material/BarChart'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
-import TableChartIcon from '@mui/icons-material/TableChart'
+import TableViewIcon from '@mui/icons-material/TableView'
 import LabelIcon from '@mui/icons-material/Label'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
@@ -29,7 +29,7 @@ const DRAWER_WIDTH = 240
 const NAV_ITEMS: { path: string; label: string; icon: React.ReactNode }[] = [
   { path: '/visualization', label: 'Visualizations', icon: <BarChartIcon /> },
   { path: '/data', label: 'Data', icon: <CloudUploadIcon /> },
-  { path: '/inspect', label: 'Inspect', icon: <TableChartIcon /> },
+  { path: '/inspect', label: 'Inspect', icon: <TableViewIcon /> },
   { path: '/categorization', label: 'Categorization', icon: <LabelIcon /> },
 ]
 

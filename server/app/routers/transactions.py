@@ -7,7 +7,9 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query
 
 from ..parsing import clean_text, parse_amount, parse_date, read_csv_rows
+from ..services.categorization import RuleMatch, match_row
 from ..services.csv_files import iter_csv_paths
+from ..services.rules import load_rule_models
 
 router = APIRouter(tags=["transactions"])
 
@@ -19,6 +21,45 @@ def _parse_date_param(value: str | None, name: str) -> date | None:
     if parsed is None:
         raise HTTPException(status_code=400, detail=f"Invalid '{name}' date")
     return parsed
+
+
+def _build_transaction(
+    p, schema, row_idx: int, row: list[str], d: date, matches: list[RuleMatch]
+) -> dict:
+    debit: float | None = None
+    for i in schema.debit_idxs:
+        if i < len(row):
+            v = parse_amount(row[i])
+            if v is not None:
+                debit = (debit or 0.0) + v
+    credit: float | None = None
+    for i in schema.credit_idxs:
+        if i < len(row):
+            v = parse_amount(row[i])
+            if v is not None:
+                credit = (credit or 0.0) + v
+    used = {schema.date_col, *schema.debit_idxs, *schema.credit_idxs}
+    parts: list[str] = []
+    for i, raw in enumerate(row):
+        if i in used:
+            continue
+        cleaned = clean_text(raw)
+        if not cleaned:
+            continue
+        if parse_amount(cleaned) is not None:
+            continue
+        parts.append(cleaned)
+    description = " · ".join(parts[:2])
+    return {
+        "date": d.isoformat(),
+        "description": description,
+        "debit": round(debit, 2) if debit is not None else None,
+        "credit": round(credit, 2) if credit is not None else None,
+        "source": p.name,
+        "row_index": row_idx,
+        "category": matches[0].category if matches else None,
+        "matched_rule_ids": [m.rule_id for m in matches],
+    }
 
 
 @router.get("/summary")
@@ -112,6 +153,7 @@ def transactions(
 ):
     from_date = _parse_date_param(from_, "from")
     to_date = _parse_date_param(to, "to")
+    rules = load_rule_models()
 
     result: list[dict] = []
     for p in iter_csv_paths():
@@ -125,37 +167,49 @@ def transactions(
                 continue
             if to_date and d > to_date:
                 continue
-            debit: float | None = None
-            for i in schema.debit_idxs:
-                if i < len(row):
-                    v = parse_amount(row[i])
-                    if v is not None:
-                        debit = (debit or 0.0) + v
-            credit: float | None = None
-            for i in schema.credit_idxs:
-                if i < len(row):
-                    v = parse_amount(row[i])
-                    if v is not None:
-                        credit = (credit or 0.0) + v
-            used = {schema.date_col, *schema.debit_idxs, *schema.credit_idxs}
-            parts: list[str] = []
-            for i, raw in enumerate(row):
-                if i in used:
-                    continue
-                cleaned = clean_text(raw)
-                if not cleaned:
-                    continue
-                if parse_amount(cleaned) is not None:
-                    continue
-                parts.append(cleaned)
-            description = " · ".join(parts[:2])
-            result.append({
-                "date": d.isoformat(),
-                "description": description,
-                "debit": round(debit, 2) if debit is not None else None,
-                "credit": round(credit, 2) if credit is not None else None,
-                "source": p.name,
-                "row_index": row_idx,
-            })
+            matches = match_row(rules, schema.headers_lower, row)
+            result.append(_build_transaction(p, schema, row_idx, row, d, matches))
     result.sort(key=lambda r: r["date"])
     return result
+
+
+@router.get("/transactions/conflicts")
+def transaction_conflicts(
+    from_: str | None = Query(default=None, alias="from"),
+    to: str | None = Query(default=None),
+):
+    """Return transactions matched by more than one rule.
+
+    These are the rows where the user's rules overlap — they need to be
+    resolved by tightening keywords, narrowing columns, or reordering rule
+    priority so the intended rule wins.
+    """
+    from_date = _parse_date_param(from_, "from")
+    to_date = _parse_date_param(to, "to")
+    rules = load_rule_models()
+    rule_by_id = {r.id: r for r in rules}
+
+    conflicts: list[dict] = []
+    for p in iter_csv_paths():
+        for schema, row_idx, row in read_csv_rows(p):
+            if schema.date_col is None or schema.date_col >= len(row):
+                continue
+            d = parse_date(row[schema.date_col])
+            if d is None:
+                continue
+            if from_date and d < from_date:
+                continue
+            if to_date and d > to_date:
+                continue
+            matches = match_row(rules, schema.headers_lower, row)
+            if len(matches) <= 1:
+                continue
+            txn = _build_transaction(p, schema, row_idx, row, d, matches)
+            txn["matched_rules"] = [
+                {"id": m.rule_id, "category": m.category, "keywords": rule_by_id[m.rule_id].keywords}
+                for m in matches
+                if m.rule_id in rule_by_id
+            ]
+            conflicts.append(txn)
+    conflicts.sort(key=lambda r: r["date"])
+    return conflicts

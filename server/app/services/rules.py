@@ -10,8 +10,25 @@ from __future__ import annotations
 import json
 
 from ..config import DATA_DIR
+from ..models import Rule
 
 _RULES_PATH = DATA_DIR / "rules.json"
+
+
+def load_rule_models() -> list[Rule]:
+    """Load rules as validated `Rule` instances, silently dropping malformed entries.
+
+    Used by callers that need to apply rules (matchers, categorization endpoints).
+    Corruption of a single entry should never take down endpoints that show data —
+    the user can still see transactions, just without that broken rule applied.
+    """
+    parsed: list[Rule] = []
+    for raw in load_rules():
+        try:
+            parsed.append(Rule(**raw))
+        except Exception:
+            continue
+    return parsed
 
 
 def load_rules() -> list[dict]:

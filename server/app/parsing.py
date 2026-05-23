@@ -72,11 +72,18 @@ def detect_date_col(cols: list[str]) -> int | None:
 
 @dataclass(frozen=True)
 class CsvSchema:
-    """Indices of semantic columns within a CSV's header row."""
+    """Indices of semantic columns within a CSV's header row.
+
+    `headers_lower` is the full cleaned-and-lowercased header list. It's
+    included here so callers that need to match user-defined column names
+    (e.g. the categorization matcher) don't have to re-clean the header on
+    every row.
+    """
 
     debit_idxs: list[int]
     credit_idxs: list[int]
     date_col: int | None
+    headers_lower: tuple[str, ...]
 
 
 def detect_schema(header: list[str]) -> CsvSchema:
@@ -85,6 +92,7 @@ def detect_schema(header: list[str]) -> CsvSchema:
         debit_idxs=[i for i, c in enumerate(cols) if "debit" in c or "дебит" in c],
         credit_idxs=[i for i, c in enumerate(cols) if "credit" in c or "кредит" in c],
         date_col=detect_date_col(cols),
+        headers_lower=tuple(cols),
     )
 
 

@@ -41,6 +41,23 @@ export function getCsv(name: string): Promise<CsvContents> {
   return fetch(`${API_BASE}/csv/${encodeURIComponent(name)}`).then(handle<CsvContents>)
 }
 
+export interface CsvRowCategory {
+  row_index: number
+  category: string | null
+  color: string | null
+  matched_rule_ids: string[]
+}
+
+export interface CsvCategoriesResponse {
+  categories: CsvRowCategory[]
+}
+
+export function getCsvCategories(name: string): Promise<CsvCategoriesResponse> {
+  return fetch(`${API_BASE}/csv/${encodeURIComponent(name)}/categories`).then(
+    handle<CsvCategoriesResponse>,
+  )
+}
+
 export interface Schema {
   columns: string[]
 }
@@ -54,6 +71,7 @@ export interface Rule {
   category: string
   columns: string[]
   keywords: string[]
+  color?: string | null
 }
 
 export interface RulesPayload {
@@ -70,6 +88,27 @@ export function putRules(rules: Rule[]): Promise<RulesPayload> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rules }),
   }).then(handle<RulesPayload>)
+}
+
+export interface Group {
+  name: string
+  children: string[]
+}
+
+export interface GroupsPayload {
+  groups: Group[]
+}
+
+export function getGroups(): Promise<GroupsPayload> {
+  return fetch(`${API_BASE}/groups`).then(handle<GroupsPayload>)
+}
+
+export function putGroups(groups: Group[]): Promise<GroupsPayload> {
+  return fetch(`${API_BASE}/groups`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groups }),
+  }).then(handle<GroupsPayload>)
 }
 
 export function uploadCsv(file: File): Promise<CsvFile> {
@@ -104,6 +143,12 @@ export interface Transaction {
   credit: number | null
   source: string
   row_index: number
+  category: string | null
+  matched_rule_ids: string[]
+}
+
+export interface TransactionConflict extends Transaction {
+  matched_rules: { id: string; category: string; keywords: string[] }[]
 }
 
 export function getTransactions(from?: string, to?: string): Promise<Transaction[]> {
@@ -112,6 +157,19 @@ export function getTransactions(from?: string, to?: string): Promise<Transaction
   if (to) params.set('to', to)
   const qs = params.toString()
   return fetch(`${API_BASE}/transactions${qs ? `?${qs}` : ''}`).then(handle<Transaction[]>)
+}
+
+export function getTransactionConflicts(
+  from?: string,
+  to?: string,
+): Promise<TransactionConflict[]> {
+  const params = new URLSearchParams()
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  const qs = params.toString()
+  return fetch(`${API_BASE}/transactions/conflicts${qs ? `?${qs}` : ''}`).then(
+    handle<TransactionConflict[]>,
+  )
 }
 
 export function getTimeline(
