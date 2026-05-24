@@ -45,6 +45,7 @@ import {
   type Transaction,
   type TransactionConflict,
 } from '../api'
+import { amountFmt } from './visualizations/TransactionDetailsPanel'
 
 function newId(): string {
   return Math.random().toString(36).slice(2, 10)
@@ -173,10 +174,54 @@ export default function Categorization() {
       .catch(() => {})
   }, [conflictsRefreshKey])
 
-  const uncategorizedCount = useMemo(
-    () => transactions.filter((t) => t.category === null).length,
+  const uncategorizedTxns = useMemo(
+    () => transactions.filter((t) => t.category === null),
     [transactions],
   )
+  const uncategorizedCount = uncategorizedTxns.length
+
+  // Sampler: one random uncategorized transaction is surfaced so the user can
+  // build rules without bouncing to the Inspect view. Holding a reference (not
+  // an index) lets the sampler survive list reorders; if the held transaction
+  // becomes categorized after a rule edit, the effect below auto-refreshes.
+  const [uncatPreview, setUncatPreview] = useState<Transaction | null>(null)
+  // Form-section anchor so "Use" can scroll the pattern input into view after
+  // it pre-fills the draft.
+  const patternInputRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (uncategorizedTxns.length === 0) {
+      if (uncatPreview !== null) setUncatPreview(null)
+      return
+    }
+    if (!uncatPreview || !uncategorizedTxns.includes(uncatPreview)) {
+      setUncatPreview(
+        uncategorizedTxns[Math.floor(Math.random() * uncategorizedTxns.length)],
+      )
+    }
+  }, [uncategorizedTxns, uncatPreview])
+
+  function pickNextUncategorized() {
+    if (uncategorizedTxns.length === 0) return
+    // Bias against picking the same one again when there's choice.
+    const pool =
+      uncatPreview && uncategorizedTxns.length > 1
+        ? uncategorizedTxns.filter((t) => t !== uncatPreview)
+        : uncategorizedTxns
+    setUncatPreview(pool[Math.floor(Math.random() * pool.length)])
+  }
+
+  function useUncategorizedAsDraft(t: Transaction) {
+    // Match the Inspect view's prefill shape: lowercased, comma-separated tokens
+    // derived from the server-built description (which joins the first two
+    // non-amount/non-date columns with " · ").
+    const tokens = t.description
+      .split(' · ')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+    setPatternDraft(tokens.join(', '))
+    patternInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
   // -- Rules: persistence and mutations ---------------------------------------
 
@@ -565,6 +610,7 @@ export default function Categorization() {
             )}
           />
         </Stack>
+        <Box ref={patternInputRef} />
         <TextField
           label="Patterns"
           size="small"
@@ -580,8 +626,7 @@ export default function Categorization() {
             }
           }}
           onBlur={() => commitPatternDraft()}
-          placeholder="Type a pattern and press Enter (e.g. fantastico, bgr sofia billa)"
-          helperText="Substring match, case-insensitive. Patterns may contain spaces. Separate with Enter or comma."
+          placeholder="Type a pattern and press Enter (e.g. fantastico, bgr sofia billa) - Substring match, case-insensitive. Patterns may contain spaces. Separate with Enter or comma."
         />
         {patterns.length > 0 && (
           <Stack direction="row" spacing={1} useFlexGap sx={{ mt: 1, flexWrap: 'wrap' }}>
@@ -653,16 +698,91 @@ export default function Categorization() {
       </Box>
 
       {/* ------------------------------------------------------------------ */}
+      {/* Uncategorized sampler — random uncategorized txn + Next/Use         */}
+      {/* ------------------------------------------------------------------ */}
+      {uncategorizedTxns.length > 0 && (
+        <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+          <Stack
+            direction="row"
+            alignItems="baseline"
+            justifyContent="space-between"
+            sx={{ mb: 1 }}
+          >
+          </Stack>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', mb: 1.5 }}
+          >
+            One random uncategorized transaction at a time. Click <strong>Use</strong> to
+            seed the pattern input above, or <strong>Next</strong> to skip.
+          </Typography>
+          {uncatPreview && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+                p: 1.5,
+                borderRadius: 1,
+                bgcolor: 'action.hover',
+              }}
+            >
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" noWrap title={uncatPreview.description}>
+                  {uncatPreview.description || <em>(no description)</em>}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  {uncatPreview.date} · {uncatPreview.source}
+                </Typography>
+              </Box>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontVariantNumeric: 'tabular-nums',
+                  fontWeight: 500,
+                  whiteSpace: 'nowrap',
+                  color:
+                    uncatPreview.debit !== null
+                      ? 'error.main'
+                      : uncatPreview.credit !== null
+                        ? 'success.main'
+                        : 'text.secondary',
+                }}
+              >
+                {uncatPreview.debit !== null
+                  ? amountFmt.format(uncatPreview.debit)
+                  : uncatPreview.credit !== null
+                    ? amountFmt.format(uncatPreview.credit)
+                    : '—'}
+              </Typography>
+              <Button
+                variant="contained"
+                size="small"
+                onClick={() => useUncategorizedAsDraft(uncatPreview)}
+              >
+                Use
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={pickNextUncategorized}
+                disabled={uncategorizedTxns.length < 2}
+              >
+                Next
+              </Button>
+            </Box>
+          )}
+        </Paper>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
       {/* Rules list                                                          */}
       {/* ------------------------------------------------------------------ */}
       <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
         <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 2 }}>
           <Typography variant="subtitle1">
             Rules
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {rules.length} {rules.length === 1 ? 'rule' : 'rules'} · {existingCategories.length}{' '}
-            {existingCategories.length === 1 ? 'leaf' : 'leaves'}
           </Typography>
         </Stack>
 

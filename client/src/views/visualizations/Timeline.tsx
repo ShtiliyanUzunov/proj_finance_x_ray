@@ -52,6 +52,40 @@ function monthLabel(period: string): string {
   return Number.isNaN(month) ? '' : MONTH_SHORT[month - 1] ?? ''
 }
 
+// Backfill empty buckets across the [from, to] range so a day/month with zero
+// transactions still renders as a gap-free zero bar. The server only emits
+// buckets that have data, so without this the x-axis silently collapses days
+// with no activity — confusing in day mode and inconsistent in month mode too.
+// Iterates in UTC to avoid DST off-by-one when crossing daylight-saving boundaries.
+function fillBucketGaps(
+  from: string,
+  to: string,
+  bucket: 'day' | 'month',
+  items: TimelinePoint[],
+): TimelinePoint[] {
+  if (!from || !to) return items
+  const byPeriod = new Map(items.map((i) => [i.period, i]))
+  const result: TimelinePoint[] = []
+  if (bucket === 'day') {
+    const start = new Date(`${from}T00:00:00Z`)
+    const end = new Date(`${to}T00:00:00Z`)
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return items
+    for (const cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      const key = cursor.toISOString().slice(0, 10)
+      result.push(byPeriod.get(key) ?? { period: key, debit: 0, credit: 0 })
+    }
+  } else {
+    const start = new Date(`${from.slice(0, 7)}-01T00:00:00Z`)
+    const end = new Date(`${to.slice(0, 7)}-01T00:00:00Z`)
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return items
+    for (const cursor = new Date(start); cursor <= end; cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
+      const key = cursor.toISOString().slice(0, 7)
+      result.push(byPeriod.get(key) ?? { period: key, debit: 0, credit: 0 })
+    }
+  }
+  return result
+}
+
 export interface TimelineMeta {
   bucket: 'day' | 'month'
   count: number
@@ -67,7 +101,7 @@ interface Props {
 const MIN_GROUP_WIDTH = 30
 const MAX_GROUP_WIDTH: Record<'day' | 'month', number> = {
   day: 110,
-  month: 220,
+  month: 440,
 }
 const CHART_PADDING = 80
 const CHART_HEIGHT = 420
@@ -211,18 +245,23 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
   // what shows in the side panel. Without a filter, keep using the server-computed series
   // (it includes uncategorized rows, which the client-side derivation would silently drop).
   const chartItems = useMemo<TimelinePoint[]>(() => {
-    if (!filterRuleIds) return items
-    const periods = [...txnsByPeriod.keys()].sort()
-    return periods.map((period) => {
-      let debit = 0
-      let credit = 0
-      for (const t of txnsByPeriod.get(period) ?? []) {
-        if (t.debit !== null) debit += t.debit
-        if (t.credit !== null) credit += t.credit
-      }
-      return { period, debit, credit }
-    })
-  }, [filterRuleIds, items, txnsByPeriod])
+    let raw: TimelinePoint[]
+    if (!filterRuleIds) {
+      raw = items
+    } else {
+      const periods = [...txnsByPeriod.keys()].sort()
+      raw = periods.map((period) => {
+        let debit = 0
+        let credit = 0
+        for (const t of txnsByPeriod.get(period) ?? []) {
+          if (t.debit !== null) debit += t.debit
+          if (t.credit !== null) credit += t.credit
+        }
+        return { period, debit, credit }
+      })
+    }
+    return fillBucketGaps(from, to, bucket, raw)
+  }, [filterRuleIds, items, txnsByPeriod, from, to, bucket])
 
   useEffect(() => {
     onMeta?.({ bucket, count: chartItems.length })
@@ -282,6 +321,10 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
           title={selectedPeriod}
           transactions={txnsByPeriod.get(selectedPeriod) ?? []}
           dateColumn={bucket === 'month' ? 'short' : 'none'}
+          hideDebits={!showDebit}
+          hideCredits={!showCredit}
+          rules={rules}
+          groups={groups}
           onClose={() => setSelectedPeriod(null)}
           onTransactionClick={(t) => {
             navigate(`/inspect/${encodeURIComponent(t.source)}?row=${t.row_index}`)

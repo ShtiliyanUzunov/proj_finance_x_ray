@@ -15,9 +15,46 @@
       "bms",
       "t market",
       "billa",
-      "ebag"
+      "ebag",
+      "zoyashop",
+      "parkmart holding",
+      "duner rafi",
+      "lili",
+      "sofia geo dim",
+      "orenda atesh",
+      "kaufland",
+      "zoya",
+      "silver street shop",
+      "lily",
+      "parkmart",
+      "forno adeso",
+      "nikon nk"
     ],
     "color": "#e72323"
+  },
+  {
+    "id": "k5jen808",
+    "category": "Restaurants",
+    "columns": [
+      "Наредител/Получател",
+      "Номер сметка на наредителя / получателя",
+      "Основание"
+    ],
+    "patterns": [
+      "sofia zala levski",
+      "sofia food hospitals",
+      "varna bistro forrest",
+      "coffee rings",
+      "varna cubo",
+      "stroeja",
+      "habib",
+      "makalali",
+      "staria chinar",
+      "soho",
+      "roma bene",
+      "brick port"
+    ],
+    "color": "#df2b0c"
   },
   {
     "id": "4ecra07g",
@@ -42,9 +79,34 @@
       "google one",
       "google",
       "steam purchase",
-      "hbomax"
+      "hbomax",
+      "такса пакетно обслужване",
+      "claude ai",
+      "skyshowtime"
     ],
     "color": "#2873b8"
+  },
+  {
+    "id": "f1sfcvd3",
+    "category": "Kids-lifestyle",
+    "columns": [
+      "Основание",
+      "Наредител/Получател",
+      "Номер сметка на наредителя / получателя"
+    ],
+    "patterns": [
+      "intersport",
+      "hippoland",
+      "tuhovishta vi ashli",
+      "p kuul klab",
+      "petrich forever 1",
+      "helikon",
+      "eych end em",
+      "vitosha ski",
+      "orange paradise",
+      "eaglesbasketball"
+    ],
+    "color": "#1976d2"
   },
   {
     "id": "fqbri60m",
@@ -60,6 +122,22 @@
     "color": "#e4cc2f"
   },
   {
+    "id": "imnioehk",
+    "category": "Birthdays",
+    "columns": [
+      "Наредител/Получател",
+      "Основание",
+      "Номер сметка на наредителя / получателя"
+    ],
+    "patterns": [
+      "maxiland",
+      "revolut 9331",
+      "максиленд",
+      "булран"
+    ],
+    "color": "#aa139d"
+  },
+  {
     "id": "dbuvsiw2",
     "category": "Remont-Varna",
     "columns": [
@@ -70,7 +148,13 @@
     "patterns": [
       "zhivko lipchev",
       "ремонт варна",
-      "хармония тм"
+      "хармония тм",
+      "петър хаджипетров",
+      "veto bul",
+      "vimaks klima",
+      "geoteh",
+      "intesa",
+      "плащане за врати"
     ],
     "color": "#70296a"
   },
@@ -98,7 +182,14 @@
       "вик софийска вода - ел.канали и каса",
       "a1 аб.план",
       "овергаз",
-      "комунални разходи ел. канали"
+      "комунални разходи ел. канали",
+      "5305h602503",
+      "5305t523913",
+      "7211h198248",
+      "овегаз мрежи ад-електронни",
+      "енерго про варна - електронни канали",
+      "студена вода аб.n. 1019676",
+      "sofia easypay jsc"
     ],
     "color": "#000000"
   },
@@ -110,7 +201,10 @@
     ],
     "patterns": [
       "shell",
-      "omv"
+      "omv",
+      "medina med",
+      "lukoil",
+      "margel"
     ],
     "color": "#59b1a2"
   },
@@ -126,8 +220,27 @@
       "pepko",
       "ikea",
       "tehnomarket",
-      "jysk"
+      "jysk",
+      "sinsay",
+      "emag",
+      "temu",
+      "english home"
     ],
     "color": "#3f1008"
+  },
+  {
+    "id": "m8bir1s9",
+    "category": "Medical",
+    "columns": [
+      "Наредител/Получател",
+      "Основание",
+      "Номер сметка на наредителя / получателя"
+    ],
+    "patterns": [
+      "sopharmacy",
+      "spahieva",
+      "sana treyd ood"
+    ],
+    "color": "#e5fbbc"
   }
 ]

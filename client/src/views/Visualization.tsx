@@ -71,11 +71,6 @@ export default function Visualization() {
           </Typography>
         ) : (
           <Stack spacing={2}>
-            <Typography variant="body2" color="text.secondary">
-              <strong>{available.min}</strong> to <strong>{available.max}</strong>
-              {summary && ` · ${summary.files} ${summary.files === 1 ? 'file' : 'files'} · ${summary.total_rows} transactions total`}
-            </Typography>
-
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
               <TextField
                 label="From"

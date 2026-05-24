@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import {
   Box,
+  Chip,
   IconButton,
   Stack,
   Table,
@@ -8,9 +9,10 @@ import {
   TableCell,
   TableRow,
   Typography,
+  alpha,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
-import type { Transaction } from '../../api'
+import type { Group, Rule, Transaction } from '../../api'
 
 export const DEBIT_COLOR = '#d32f2f'
 export const CREDIT_COLOR = '#2e7d32'
@@ -33,6 +35,11 @@ interface Props {
   transactions: Transaction[]
   dateColumn?: DateColumnMode
   hideCredits?: boolean
+  hideDebits?: boolean
+  // When provided, matched rows get a color tint and show "<group> <pattern>"
+  // instead of the raw description. Unmatched rows fall back to the description.
+  rules?: Rule[]
+  groups?: Group[]
   onClose: () => void
   onTransactionClick: (t: Transaction) => void
 }
@@ -43,9 +50,54 @@ export default function TransactionDetailsPanel({
   transactions,
   dateColumn = 'none',
   hideCredits = false,
+  hideDebits = false,
+  rules,
+  groups,
   onClose,
   onTransactionClick,
 }: Props) {
+  const ruleById = useMemo(() => {
+    const m = new Map<string, Rule>()
+    if (rules) for (const r of rules) m.set(r.id, r)
+    return m
+  }, [rules])
+
+  // Map each rule id to the top-level group name that owns it (a top-level
+  // group is one not referenced as a child by any other group). Same semantics
+  // as the Overview pie chart so the labelling is consistent across views.
+  // Unowned rules get no entry — render code falls back to `rule.category`.
+  const groupNameByRuleId = useMemo(() => {
+    const out = new Map<string, string>()
+    if (!groups || groups.length === 0) return out
+    const childrenById = new Map(groups.map((g) => [g.id, g.children] as const))
+    const referenced = new Set<string>()
+    for (const g of groups) {
+      for (const c of g.children) if (childrenById.has(c)) referenced.add(c)
+    }
+    const topGroups = groups.filter((g) => !referenced.has(g.id))
+    const resolveLeafIds = (rootId: string): Set<string> => {
+      const result = new Set<string>()
+      const seen = new Set<string>()
+      const walk = (id: string) => {
+        if (seen.has(id)) return
+        seen.add(id)
+        const children = childrenById.get(id)
+        if (!children) {
+          result.add(id)
+          return
+        }
+        for (const c of children) walk(c)
+      }
+      walk(rootId)
+      return result
+    }
+    for (const g of topGroups) {
+      for (const leafId of resolveLeafIds(g.id)) {
+        if (!out.has(leafId)) out.set(leafId, g.name)
+      }
+    }
+    return out
+  }, [groups])
   let debitTotal = 0
   let creditTotal = 0
   for (const t of transactions) {
@@ -65,7 +117,19 @@ export default function TransactionDetailsPanel({
     return { debits, credits }
   }, [transactions])
 
-  const headerCount = hideCredits ? debits.length : transactions.length
+  // Header count reflects only the kinds we're actually rendering, so the
+  // "N transactions" label doesn't lie about what's visible below.
+  const headerCount =
+    hideCredits && hideDebits
+      ? 0
+      : hideCredits
+        ? debits.length
+        : hideDebits
+          ? credits.length
+          : transactions.length
+
+  const showDebitTotal = !hideDebits && debitTotal > 0
+  const showCreditTotal = !hideCredits && creditTotal > 0
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
@@ -80,14 +144,14 @@ export default function TransactionDetailsPanel({
               {subtitle}
             </Typography>
           )}
-          {(debitTotal > 0 || (!hideCredits && creditTotal > 0)) && (
+          {(showDebitTotal || showCreditTotal) && (
             <Stack direction="row" spacing={2} sx={{ mt: 0.5 }}>
-              {debitTotal > 0 && (
+              {showDebitTotal && (
                 <Typography variant="body2" sx={{ color: DEBIT_COLOR }}>
                   Debit {amountFmt.format(debitTotal)}
                 </Typography>
               )}
-              {!hideCredits && creditTotal > 0 && (
+              {showCreditTotal && (
                 <Typography variant="body2" sx={{ color: CREDIT_COLOR }}>
                   Credit {amountFmt.format(creditTotal)}
                 </Typography>
@@ -99,7 +163,7 @@ export default function TransactionDetailsPanel({
           <CloseIcon fontSize="small" />
         </IconButton>
       </Box>
-      {transactions.length === 0 ? (
+      {headerCount === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ px: 1.5, pb: 1.5 }}>
           No transactions to show.
         </Typography>
@@ -112,16 +176,20 @@ export default function TransactionDetailsPanel({
               dateColumn={dateColumn}
               transactions={credits}
               kind="credit"
+              ruleById={ruleById}
+              groupNameByRuleId={groupNameByRuleId}
               onTransactionClick={onTransactionClick}
             />
           )}
-          {debits.length > 0 && (
+          {!hideDebits && debits.length > 0 && (
             <TransactionGroup
               label="Debit"
               color={DEBIT_COLOR}
               dateColumn={dateColumn}
               transactions={debits}
               kind="debit"
+              ruleById={ruleById}
+              groupNameByRuleId={groupNameByRuleId}
               onTransactionClick={onTransactionClick}
             />
           )}
@@ -131,12 +199,25 @@ export default function TransactionDetailsPanel({
   )
 }
 
+// First pattern (case-insensitive substring) of the rule found in `text`. Used
+// to surface *which* keyword triggered a match; falls back to null if no pattern
+// is visibly present (e.g. matched on a column not in the description join).
+function findMatchedPattern(rule: Rule, text: string): string | null {
+  const lower = text.toLowerCase()
+  for (const p of rule.patterns) {
+    if (lower.includes(p)) return p
+  }
+  return null
+}
+
 function TransactionGroup({
   label,
   color,
   dateColumn,
   transactions,
   kind,
+  ruleById,
+  groupNameByRuleId,
   onTransactionClick,
 }: {
   label: string
@@ -144,6 +225,8 @@ function TransactionGroup({
   dateColumn: DateColumnMode
   transactions: Transaction[]
   kind: 'debit' | 'credit'
+  ruleById: Map<string, Rule>
+  groupNameByRuleId: Map<string, string>
   onTransactionClick: (t: Transaction) => void
 }) {
   const total = transactions.reduce(
@@ -184,12 +267,26 @@ function TransactionGroup({
             const amount = kind === 'debit' ? t.debit : t.credit
             const dateLabel =
               dateColumn === 'short' ? t.date.slice(5) : dateColumn === 'full' ? t.date : null
+            const matchedRule = t.matched_rule_ids.length > 0
+              ? ruleById.get(t.matched_rule_ids[0])
+              : undefined
+            const matchedPattern =
+              matchedRule && t.description
+                ? findMatchedPattern(matchedRule, t.description)
+                : null
+            const tint = matchedRule?.color
             return (
               <TableRow
                 key={i}
                 hover
                 onClick={() => onTransactionClick(t)}
-                sx={{ cursor: 'pointer' }}
+                sx={{
+                  cursor: 'pointer',
+                  ...(tint && {
+                    bgcolor: alpha(tint, 0.1),
+                    '&:hover': { bgcolor: alpha(tint, 0.18) },
+                  }),
+                }}
               >
                 {dateLabel !== null && (
                   <TableCell
@@ -207,12 +304,59 @@ function TransactionGroup({
                     py: 0.5,
                     maxWidth: 240,
                     overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
                   }}
                   title={t.description}
                 >
-                  {t.description || '—'}
+                  {matchedRule ? (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 0.75,
+                        minWidth: 0,
+                      }}
+                    >
+                      <Box
+                        component="span"
+                        sx={{
+                          fontWeight: 500,
+                          color: tint,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          minWidth: 0,
+                        }}
+                      >
+                        {groupNameByRuleId.get(matchedRule.id) ?? matchedRule.category}
+                      </Box>
+                      {matchedPattern && tint && (
+                        <Chip
+                          label={matchedPattern}
+                          size="small"
+                          sx={{
+                            height: 18,
+                            flexShrink: 0,
+                            bgcolor: alpha(tint, 0.2),
+                            color: tint,
+                            fontSize: '0.7rem',
+                            '& .MuiChip-label': { px: 0.75 },
+                          }}
+                        />
+                      )}
+                    </Box>
+                  ) : (
+                    <Box
+                      component="span"
+                      sx={{
+                        display: 'block',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {t.description || '—'}
+                    </Box>
+                  )}
                 </TableCell>
                 <TableCell
                   align="right"
