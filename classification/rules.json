@@ -1,68 +1,23 @@
 [
   {
     "id": "8f00a1y6",
-    "category": "FANTASTICO",
+    "category": "FOOD",
     "columns": [
       "Основание",
       "Наредител/Получател",
       "Номер сметка на наредителя / получателя"
     ],
-    "keywords": [
-      "fantastico"
+    "patterns": [
+      "fantastico",
+      "bgr sofia billa",
+      "lidl",
+      "market nablizo",
+      "bms",
+      "t market",
+      "billa",
+      "ebag"
     ],
     "color": "#e72323"
-  },
-  {
-    "id": "6smhjc88",
-    "category": "Billa",
-    "columns": [
-      "Наредител/Получател",
-      "Основание",
-      "Номер сметка на наредителя / получателя"
-    ],
-    "keywords": [
-      "bgr sofia billa"
-    ],
-    "color": "#dc0909"
-  },
-  {
-    "id": "cid264cf",
-    "category": "LIDL",
-    "columns": [
-      "Основание",
-      "Наредител/Получател",
-      "Номер сметка на наредителя / получателя"
-    ],
-    "keywords": [
-      "lidl"
-    ],
-    "color": "#e56824"
-  },
-  {
-    "id": "z8lq03vi",
-    "category": "HBO",
-    "columns": [
-      "Основание",
-      "Наредител/Получател",
-      "Номер сметка на наредителя / получателя"
-    ],
-    "keywords": [
-      "hbomax"
-    ],
-    "color": "#1976d2"
-  },
-  {
-    "id": "d0qcnpre",
-    "category": "Google",
-    "columns": [
-      "Основание",
-      "Наредител/Получател",
-      "Номер сметка на наредителя / получателя"
-    ],
-    "keywords": [
-      "google one"
-    ],
-    "color": "#2873b8"
   },
   {
     "id": "4ecra07g",
@@ -70,20 +25,36 @@
     "columns": [
       "Наредител/Получател"
     ],
-    "keywords": [
+    "patterns": [
       "доротея георгиева воева"
     ],
-    "color": "#273144"
+    "color": "#38455c"
   },
   {
-    "id": "fqbri60m",
-    "category": "DSK_Loan",
+    "id": "d0qcnpre",
+    "category": "Subscriptions",
     "columns": [
       "Основание",
       "Наредител/Получател",
       "Номер сметка на наредителя / получателя"
     ],
-    "keywords": [
+    "patterns": [
+      "google one",
+      "google",
+      "steam purchase",
+      "hbomax"
+    ],
+    "color": "#2873b8"
+  },
+  {
+    "id": "fqbri60m",
+    "category": "DSK Loan",
+    "columns": [
+      "Основание",
+      "Наредител/Получател",
+      "Номер сметка на наредителя / получателя"
+    ],
+    "patterns": [
       "плащане по заем към rl"
     ],
     "color": "#e4cc2f"
@@ -96,7 +67,7 @@
       "Наредител/Получател",
       "Номер сметка на наредителя / получателя"
     ],
-    "keywords": [
+    "patterns": [
       "zhivko lipchev",
       "ремонт варна",
       "хармония тм"
@@ -105,38 +76,14 @@
   },
   {
     "id": "ndvnxlxv",
-    "category": "Garage_rental",
+    "category": "Garage",
     "columns": [
       "Наредител/Получател"
     ],
-    "keywords": [
+    "patterns": [
       "dimtar grigorov bakalov"
     ],
     "color": "#b0e51f"
-  },
-  {
-    "id": "tqan1u7m",
-    "category": "BMS",
-    "columns": [
-      "Наредител/Получател"
-    ],
-    "keywords": [
-      "bms"
-    ],
-    "color": "#f21c0d"
-  },
-  {
-    "id": "h01xbwrt",
-    "category": "Nablizo",
-    "columns": [
-      "Основание",
-      "Наредител/Получател",
-      "Номер сметка на наредителя / получателя"
-    ],
-    "keywords": [
-      "market nablizo"
-    ],
-    "color": "#d31212"
   },
   {
     "id": "tqvrd7pi",
@@ -146,7 +93,7 @@
       "Наредител/Получател",
       "Номер сметка на наредителя / получателя"
     ],
-    "keywords": [
+    "patterns": [
       "електрохолд продажби ад",
       "вик софийска вода - ел.канали и каса",
       "a1 аб.план",
@@ -157,11 +104,11 @@
   },
   {
     "id": "ph6s8tf3",
-    "category": "Fuel",
+    "category": "Car",
     "columns": [
       "Наредител/Получател"
     ],
-    "keywords": [
+    "patterns": [
       "shell",
       "omv"
     ],
@@ -173,7 +120,7 @@
     "columns": [
       "Наредител/Получател"
     ],
-    "keywords": [
+    "patterns": [
       "dm bulgaria",
       "pepco",
       "pepko",

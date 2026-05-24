@@ -51,42 +51,45 @@ interface GroupSlice {
 
 // Top-level groups are those not referenced as a child by any other group — these
 // are the roots the user wants to see on the pie. A transaction is attributed to
-// the first top-level group whose descendant leaf set contains its category.
+// the first top-level group whose descendant rule-id set contains the rule that
+// matched it (`matched_rule_ids[0]`, mirroring the server's first-match priority).
 // Slice value is debit-only (spending); credit-only transactions don't contribute
 // to slice size but still appear in the side panel for the group they belong to.
 function buildSlices(transactions: Transaction[], groups: Group[]): GroupSlice[] {
-  const groupsByName = new Map(groups.map((g) => [g.name, g.children] as const))
+  const groupsById = new Map(groups.map((g) => [g.id, g.children] as const))
 
   const referenced = new Set<string>()
   for (const g of groups) {
     for (const child of g.children) {
-      if (groupsByName.has(child)) referenced.add(child)
+      if (groupsById.has(child)) referenced.add(child)
     }
   }
-  const topGroups = groups.filter((g) => !referenced.has(g.name))
+  const topGroups = groups.filter((g) => !referenced.has(g.id))
 
-  const resolveLeaves = (name: string): Set<string> => {
+  // Expand a group to the set of leaf rule IDs it covers (children that aren't
+  // groups are treated as rule IDs; ghosts will simply never match a transaction).
+  const resolveLeafIds = (rootId: string): Set<string> => {
     const out = new Set<string>()
     const seen = new Set<string>()
-    const walk = (n: string) => {
-      if (seen.has(n)) return
-      seen.add(n)
-      const children = groupsByName.get(n)
+    const walk = (id: string) => {
+      if (seen.has(id)) return
+      seen.add(id)
+      const children = groupsById.get(id)
       if (!children) {
-        out.add(n)
+        out.add(id)
         return
       }
       for (const c of children) walk(c)
     }
-    walk(name)
+    walk(rootId)
     return out
   }
 
-  // category → top-group name (first owner wins on overlap)
-  const categoryOwner = new Map<string, string>()
+  // rule id → top-group id (first owner wins on overlap)
+  const ruleOwner = new Map<string, string>()
   for (const g of topGroups) {
-    for (const leaf of resolveLeaves(g.name)) {
-      if (!categoryOwner.has(leaf)) categoryOwner.set(leaf, g.name)
+    for (const leafId of resolveLeafIds(g.id)) {
+      if (!ruleOwner.has(leafId)) ruleOwner.set(leafId, g.id)
     }
   }
 
@@ -104,10 +107,19 @@ function buildSlices(transactions: Transaction[], groups: Group[]): GroupSlice[]
   }
 
   for (const t of transactions) {
-    const owner = t.category !== null ? categoryOwner.get(t.category) : undefined
-    const id = owner ?? UNCLASSIFIED_ID
-    const label = owner ?? UNCLASSIFIED_LABEL
-    const entry = ensure(id, label)
+    let ownerId: string | undefined
+    for (const ruleId of t.matched_rule_ids) {
+      const owner = ruleOwner.get(ruleId)
+      if (owner) {
+        ownerId = owner
+        break
+      }
+    }
+    const bucketId = ownerId ?? UNCLASSIFIED_ID
+    const label = ownerId
+      ? topGroups.find((g) => g.id === ownerId)?.name ?? UNCLASSIFIED_LABEL
+      : UNCLASSIFIED_LABEL
+    const entry = ensure(bucketId, label)
     entry.transactions.push(t)
     if (t.debit !== null) entry.value += t.debit
   }
@@ -115,10 +127,10 @@ function buildSlices(transactions: Transaction[], groups: Group[]): GroupSlice[]
   const slices: GroupSlice[] = []
   let colorIdx = 0
   for (const g of topGroups) {
-    const entry = byGroup.get(g.name)
+    const entry = byGroup.get(g.id)
     if (!entry || entry.value === 0) continue
     slices.push({
-      id: g.name,
+      id: g.id,
       label: g.name,
       color: GROUP_PALETTE[colorIdx++ % GROUP_PALETTE.length],
       value: entry.value,

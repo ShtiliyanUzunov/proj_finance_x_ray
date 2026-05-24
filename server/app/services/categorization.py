@@ -5,9 +5,10 @@ needs. This keeps it trivially unit-testable and avoids any reload races with
 the rules-file persistence layer.
 
 Matching semantics:
-- Keywords are substring matches against the **cleaned, lowercased** cell text
-  of the rule's chosen columns.
-- A rule matches a row if *any* keyword appears in *any* of the rule's columns
+- Patterns are substring matches against the **cleaned, lowercased** cell text
+  of the rule's chosen columns. A pattern can be a single word or a multi-word
+  phrase — it's matched literally as a substring.
+- A rule matches a row if *any* pattern appears in *any* of the rule's columns
   that exist in this row. One column hit is enough.
 - Rules are checked in caller-provided order (the on-disk order) so the first
   entry in the returned list is the priority-winning rule.
@@ -45,7 +46,7 @@ def match_row(
     matches: list[RuleMatch] = []
     for rule in rules:
         rule_cols = {c.lower() for c in rule.columns}
-        if not rule_cols or not rule.keywords:
+        if not rule_cols or not rule.patterns:
             continue
         col_indices = [i for i, h in enumerate(cleaned_header_lower) if h in rule_cols]
         if not col_indices:
@@ -56,7 +57,7 @@ def match_row(
             cell = clean_text(row[i]).lower()
             if not cell:
                 continue
-            if any(kw in cell for kw in rule.keywords):
+            if any(p in cell for p in rule.patterns):
                 matches.append(RuleMatch(rule_id=rule.id, category=rule.category))
                 break
     return matches

@@ -70,7 +70,7 @@ export interface Rule {
   id: string
   category: string
   columns: string[]
-  keywords: string[]
+  patterns: string[]
   color?: string | null
 }
 
@@ -91,7 +91,11 @@ export function putRules(rules: Rule[]): Promise<RulesPayload> {
 }
 
 export interface Group {
+  id: string
   name: string
+  // IDs of child references — each ID resolves to either a rule (Rule.id) or
+  // another group (Group.id). References by ID, not name, so renames are safe
+  // and a group may share its `name` with a rule's `category` without conflict.
   children: string[]
 }
 
@@ -148,7 +152,7 @@ export interface Transaction {
 }
 
 export interface TransactionConflict extends Transaction {
-  matched_rules: { id: string; category: string; keywords: string[] }[]
+  matched_rules: { id: string; category: string; patterns: string[] }[]
 }
 
 export function getTransactions(from?: string, to?: string): Promise<Transaction[]> {

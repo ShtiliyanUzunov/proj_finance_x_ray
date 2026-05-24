@@ -37,10 +37,12 @@ import {
   getRules,
   getSchema,
   getTransactionConflicts,
+  getTransactions,
   putGroups,
   putRules,
   type Group,
   type Rule,
+  type Transaction,
   type TransactionConflict,
 } from '../api'
 
@@ -86,8 +88,8 @@ export default function Categorization() {
   const [category, setCategory] = useState('')
   const [ruleColumns, setRuleColumns] = useState<string[]>([])
   const [ruleColor, setRuleColor] = useState<string>(DEFAULT_RULE_COLOR)
-  const [keywords, setKeywords] = useState<string[]>([])
-  const [keywordDraft, setKeywordDraft] = useState('')
+  const [patterns, setPatterns] = useState<string[]>([])
+  const [patternDraft, setPatternDraft] = useState('')
 
   // Schema
   const [availableColumns, setAvailableColumns] = useState<string[]>([])
@@ -114,8 +116,13 @@ export default function Categorization() {
   const [conflictsError, setConflictsError] = useState<string | null>(null)
   const [conflictsLoading, setConflictsLoading] = useState(false)
   const [conflictsExpanded, setConflictsExpanded] = useState(false)
-  // Bumped on every rules mutation so the conflicts effect refetches.
+  // Bumped on every rules mutation so the conflicts/stats effects refetch.
   const [conflictsRefreshKey, setConflictsRefreshKey] = useState(0)
+
+  // Stats panel: total transactions and how many remain uncategorized. Refetches
+  // whenever rules change (via conflictsRefreshKey) so the count reflects the
+  // latest categorization without the user reloading.
+  const [transactions, setTransactions] = useState<Transaction[]>([])
 
   useEffect(() => {
     getRules()
@@ -125,14 +132,14 @@ export default function Categorization() {
   }, [])
 
   // Hydrate the add-rule form from navigation state (e.g. the "Categorize"
-  // affordance in the Inspect view). The draft is placed in the keyword input
+  // affordance in the Inspect view). The draft is placed in the pattern input
   // *as text*, not committed as chips, so the user can edit it (or close the
   // page) before deciding whether to create the rule. Clear the state after
   // applying so a manual refresh doesn't re-prefill.
   useEffect(() => {
-    const state = location.state as { prefillKeywordDraft?: string } | null
-    if (state?.prefillKeywordDraft) {
-      setKeywordDraft(state.prefillKeywordDraft)
+    const state = location.state as { prefillPatternDraft?: string } | null
+    if (state?.prefillPatternDraft) {
+      setPatternDraft(state.prefillPatternDraft)
       setTab('rules')
       navigate(location.pathname, { replace: true, state: null })
     }
@@ -159,6 +166,18 @@ export default function Categorization() {
       .finally(() => setConflictsLoading(false))
   }, [conflictsRefreshKey])
 
+  useEffect(() => {
+    // Best-effort: stats panel falls back to "—" on failure.
+    getTransactions()
+      .then(setTransactions)
+      .catch(() => {})
+  }, [conflictsRefreshKey])
+
+  const uncategorizedCount = useMemo(
+    () => transactions.filter((t) => t.category === null).length,
+    [transactions],
+  )
+
   // -- Rules: persistence and mutations ---------------------------------------
 
   function persistRules(next: Rule[]) {
@@ -174,37 +193,37 @@ export default function Categorization() {
     [rules],
   )
 
-  function commitKeywordDraft(): string[] {
-    const tokens = keywordDraft
+  function commitPatternDraft(): string[] {
+    const tokens = patternDraft
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
-    if (tokens.length === 0) return keywords
-    const next = Array.from(new Set([...keywords, ...tokens.map((t) => t.toLowerCase())]))
-    setKeywords(next)
-    setKeywordDraft('')
+    if (tokens.length === 0) return patterns
+    const next = Array.from(new Set([...patterns, ...tokens.map((t) => t.toLowerCase())]))
+    setPatterns(next)
+    setPatternDraft('')
     return next
   }
 
   function addRule() {
-    const finalKeywords = commitKeywordDraft()
+    const finalPatterns = commitPatternDraft()
     const trimmedCategory = category.trim()
-    if (!trimmedCategory || finalKeywords.length === 0 || ruleColumns.length === 0) return
+    if (!trimmedCategory || finalPatterns.length === 0 || ruleColumns.length === 0) return
     persistRules([
       ...rules,
       {
         id: newId(),
         category: trimmedCategory,
         columns: ruleColumns,
-        keywords: finalKeywords,
+        patterns: finalPatterns,
         color: ruleColor,
       },
     ])
     setCategory('')
     setRuleColumns([])
     setRuleColor(DEFAULT_RULE_COLOR)
-    setKeywords([])
-    setKeywordDraft('')
+    setPatterns([])
+    setPatternDraft('')
   }
 
   function updateRuleColor(id: string, color: string) {
@@ -241,13 +260,13 @@ export default function Categorization() {
     persistRules(rules.map((r) => (r.id === id ? { ...r, columns } : r)))
   }
 
-  function addKeywordToRule(id: string, keyword: string) {
-    const normalized = keyword.trim().toLowerCase()
+  function addPatternToRule(id: string, pattern: string) {
+    const normalized = pattern.trim().toLowerCase()
     if (!normalized) return
     persistRules(
       rules.map((r) =>
-        r.id === id && !r.keywords.includes(normalized)
-          ? { ...r, keywords: [...r.keywords, normalized] }
+        r.id === id && !r.patterns.includes(normalized)
+          ? { ...r, patterns: [...r.patterns, normalized] }
           : r,
       ),
     )
@@ -267,20 +286,20 @@ export default function Categorization() {
     persistRules(next)
   }
 
-  function removeKeywordFromRule(ruleId: string, keyword: string) {
+  function removePatternFromRule(ruleId: string, pattern: string) {
     persistRules(
       rules
         .map((r) =>
-          r.id === ruleId ? { ...r, keywords: r.keywords.filter((k) => k !== keyword) } : r,
+          r.id === ruleId ? { ...r, patterns: r.patterns.filter((p) => p !== pattern) } : r,
         )
-        .filter((r) => r.keywords.length > 0),
+        .filter((r) => r.patterns.length > 0),
     )
   }
 
   const canAddRule =
     category.trim().length > 0 &&
     ruleColumns.length > 0 &&
-    (keywords.length > 0 || keywordDraft.trim().length > 0)
+    (patterns.length > 0 || patternDraft.trim().length > 0)
 
   // -- Groups: persistence and mutations --------------------------------------
 
@@ -295,9 +314,20 @@ export default function Categorization() {
     })
   }
 
-  const groupNames = useMemo(() => groups.map((g) => g.name), [groups])
+  // Lookups for resolving child IDs → human-readable info. Children are stored
+  // as IDs (rule.id or group.id) so renames/reuse of category names are safe.
+  const ruleById = useMemo(() => {
+    const m = new Map<string, Rule>()
+    for (const r of rules) m.set(r.id, r)
+    return m
+  }, [rules])
+  const groupById = useMemo(() => {
+    const m = new Map<string, Group>()
+    for (const g of groups) m.set(g.id, g)
+    return m
+  }, [groups])
 
-  // Names already referenced as a child in some group. The "add child" pickers
+  // IDs already referenced as a child in some group. The "add child" pickers
   // exclude these so the user only sees leaves/groups that aren't yet placed
   // anywhere — keeps the option list focused on real candidates.
   const usedChildren = useMemo(() => {
@@ -306,29 +336,29 @@ export default function Categorization() {
     return s
   }, [groups])
 
-  // Map leaf category → color from the first rule that defines it. Used to
-  // tint group child chips so groups visually inherit their leaves' colors.
-  const colorByCategory = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const r of rules) {
-      if (r.color && !m.has(r.category)) m.set(r.category, r.color)
-    }
-    return m
-  }, [rules])
-
-  // What names are valid as a group's children: every leaf category + every
-  // other group (groups can nest other groups).
+  // Picker options: rule IDs not yet used as a child anywhere. The Autocomplete
+  // renders these by looking up `rule.category`, so the picker displays category
+  // names while binding rule IDs as the actual selection value.
   const childOptionsForNew = useMemo(
-    () => existingCategories.filter((opt) => !usedChildren.has(opt)).sort(),
-    [existingCategories, usedChildren],
+    () =>
+      rules
+        .filter((r) => !usedChildren.has(r.id))
+        .map((r) => r.id)
+        .sort((a, b) =>
+          (ruleById.get(a)?.category ?? '').localeCompare(ruleById.get(b)?.category ?? ''),
+        ),
+    [rules, usedChildren, ruleById],
   )
 
-  // A child reference is a "ghost" if it doesn't resolve to a leaf or another
-  // group. Typically happens when a rule is deleted after a group was set up.
-  const knownChildren = useMemo(
-    () => new Set([...existingCategories, ...groupNames]),
-    [existingCategories, groupNames],
-  )
+  // A child reference is a "ghost" if its ID doesn't resolve to a rule or group.
+  // Typically happens when a rule/group is deleted while still referenced.
+  function resolveChild(id: string): { label: string; color?: string; kind: 'rule' | 'group' | 'ghost' } {
+    const r = ruleById.get(id)
+    if (r) return { label: r.category, color: r.color ?? undefined, kind: 'rule' }
+    const g = groupById.get(id)
+    if (g) return { label: g.name, kind: 'group' }
+    return { label: id, kind: 'ghost' }
+  }
 
   function addGroup() {
     const trimmed = groupName.trim()
@@ -337,32 +367,28 @@ export default function Categorization() {
       setGroupsSaveError(`A group named '${trimmed}' already exists`)
       return
     }
-    if (existingCategories.includes(trimmed)) {
-      setGroupsSaveError(`'${trimmed}' is already a rule category — pick a different group name`)
-      return
-    }
-    persistGroups([...groups, { name: trimmed, children: groupChildren }])
+    persistGroups([...groups, { id: newId(), name: trimmed, children: groupChildren }])
     setGroupName('')
     setGroupChildren([])
   }
 
-  function removeGroup(name: string) {
-    persistGroups(groups.filter((g) => g.name !== name))
+  function removeGroup(id: string) {
+    persistGroups(groups.filter((g) => g.id !== id))
   }
 
-  function removeChildFromGroup(groupNameToEdit: string, child: string) {
+  function removeChildFromGroup(groupId: string, childId: string) {
     persistGroups(
       groups.map((g) =>
-        g.name === groupNameToEdit ? { ...g, children: g.children.filter((c) => c !== child) } : g,
+        g.id === groupId ? { ...g, children: g.children.filter((c) => c !== childId) } : g,
       ),
     )
   }
 
-  function addChildToGroup(groupNameToEdit: string, child: string) {
+  function addChildToGroup(groupId: string, childId: string) {
     persistGroups(
       groups.map((g) =>
-        g.name === groupNameToEdit && !g.children.includes(child)
-          ? { ...g, children: [...g.children, child] }
+        g.id === groupId && !g.children.includes(childId)
+          ? { ...g, children: [...g.children, childId] }
           : g,
       ),
     )
@@ -448,7 +474,7 @@ export default function Categorization() {
         >
           <strong>{conflicts.length}</strong>{' '}
           {conflicts.length === 1 ? 'transaction matches' : 'transactions match'} more than one
-          rule. Tighten keywords or reorder rules so the intended one wins.
+          rule. Tighten patterns or reorder rules so the intended one wins.
           <Collapse in={conflictsExpanded}>
             <Box sx={{ mt: 2 }}>
               <Stack divider={<Divider flexItem />} spacing={0}>
@@ -482,12 +508,18 @@ export default function Categorization() {
       )}
 
       {/* ------------------------------------------------------------------ */}
-      {/* Add rule                                                            */}
+      {/* Add rule (60%) + Stats panel (40%)                                  */}
       {/* ------------------------------------------------------------------ */}
-      <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
-        <Typography variant="subtitle1" gutterBottom>
-          Add rule
-        </Typography>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '3fr 2fr' },
+          gap: 2,
+          mb: 3,
+          alignItems: 'stretch',
+        }}
+      >
+      <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2, alignItems: 'center' }}>
           <Tooltip title="Rule color">
             <input
@@ -534,31 +566,31 @@ export default function Categorization() {
           />
         </Stack>
         <TextField
-          label="Keywords"
+          label="Patterns"
           size="small"
           fullWidth
-          value={keywordDraft}
-          onChange={(e) => setKeywordDraft(e.target.value)}
+          value={patternDraft}
+          onChange={(e) => setPatternDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ',') {
               e.preventDefault()
-              commitKeywordDraft()
-            } else if (e.key === 'Backspace' && !keywordDraft && keywords.length > 0) {
-              setKeywords(keywords.slice(0, -1))
+              commitPatternDraft()
+            } else if (e.key === 'Backspace' && !patternDraft && patterns.length > 0) {
+              setPatterns(patterns.slice(0, -1))
             }
           }}
-          onBlur={() => commitKeywordDraft()}
-          placeholder="Type a keyword and press Enter (e.g. fantastico, billa)"
-          helperText="Substring match, case-insensitive. Separate with Enter or comma."
+          onBlur={() => commitPatternDraft()}
+          placeholder="Type a pattern and press Enter (e.g. fantastico, bgr sofia billa)"
+          helperText="Substring match, case-insensitive. Patterns may contain spaces. Separate with Enter or comma."
         />
-        {keywords.length > 0 && (
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
-            {keywords.map((k) => (
+        {patterns.length > 0 && (
+          <Stack direction="row" spacing={1} useFlexGap sx={{ mt: 1, flexWrap: 'wrap' }}>
+            {patterns.map((p) => (
               <Chip
-                key={k}
-                label={k}
+                key={p}
+                label={p}
                 size="small"
-                onDelete={() => setKeywords(keywords.filter((x) => x !== k))}
+                onDelete={() => setPatterns(patterns.filter((x) => x !== p))}
               />
             ))}
           </Stack>
@@ -575,6 +607,50 @@ export default function Categorization() {
           </Button>
         </Box>
       </Paper>
+
+      <Paper
+        variant="outlined"
+        sx={{ p: 2, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 }}
+      >
+        <Box>
+          <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: 1.2 }}>
+            Rules
+          </Typography>
+          <Typography
+            variant="h4"
+            sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500, lineHeight: 1.1 }}
+          >
+            {rules.length}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {existingCategories.length}{' '}
+            {existingCategories.length === 1 ? 'category' : 'categories'} ·{' '}
+            {groups.length} {groups.length === 1 ? 'group' : 'groups'}
+          </Typography>
+        </Box>
+        <Divider flexItem />
+        <Box>
+          <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: 1.2 }}>
+            Uncategorized
+          </Typography>
+          <Typography
+            variant="h4"
+            sx={{
+              fontVariantNumeric: 'tabular-nums',
+              fontWeight: 500,
+              lineHeight: 1.1,
+              color: uncategorizedCount > 0 ? 'warning.main' : 'success.main',
+            }}
+          >
+            {transactions.length === 0 ? '—' : uncategorizedCount.toLocaleString()}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            of {transactions.length.toLocaleString()}{' '}
+            {transactions.length === 1 ? 'transaction' : 'transactions'} unmatched
+          </Typography>
+        </Box>
+      </Paper>
+      </Box>
 
       {/* ------------------------------------------------------------------ */}
       {/* Rules list                                                          */}
@@ -721,12 +797,12 @@ export default function Categorization() {
                     </FormControl>
                   </Box>
                 </Box>
-                <KeywordEditor
-                  keywords={rule.keywords}
-                  onAdd={(k) => addKeywordToRule(rule.id, k)}
-                  onRemove={(k) => removeKeywordFromRule(rule.id, k)}
+                <PatternEditor
+                  patterns={rule.patterns}
+                  onAdd={(p) => addPatternToRule(rule.id, p)}
+                  onRemove={(p) => removePatternFromRule(rule.id, p)}
                 />
-                <Stack direction="row" sx={{ ml: 'auto' }}>
+                <Stack direction="row" sx={{ ml: 'auto', flexShrink: 0 }}>
                   <Tooltip title="Move up">
                     <span>
                       <IconButton size="small" disabled={i === 0} onClick={() => moveRule(rule.id, -1)}>
@@ -797,11 +873,12 @@ export default function Categorization() {
             options={childOptionsForNew}
             value={groupChildren}
             onChange={(_, v) => setGroupChildren(v)}
+            getOptionLabel={(id) => resolveChild(id).label}
             sx={{ flex: 2, minWidth: 260 }}
             renderTags={(value, getTagProps) =>
-              value.map((option, index) => {
+              value.map((id, index) => {
                 const { key, ...tagProps } = getTagProps({ index })
-                return <Chip key={key} label={option} size="small" {...tagProps} />
+                return <Chip key={key} label={resolveChild(id).label} size="small" {...tagProps} />
               })
             }
             renderInput={(params) => (
@@ -852,12 +929,17 @@ export default function Categorization() {
         ) : (
           <Stack divider={<Divider flexItem />}>
             {groups.map((g) => {
-              const childOptions = existingCategories
-                .filter((opt) => !usedChildren.has(opt))
-                .sort()
+              const childOptions = rules
+                .filter((r) => !usedChildren.has(r.id))
+                .map((r) => r.id)
+                .sort((a, b) =>
+                  (ruleById.get(a)?.category ?? '').localeCompare(
+                    ruleById.get(b)?.category ?? '',
+                  ),
+                )
               return (
                 <Stack
-                  key={g.name}
+                  key={g.id}
                   direction="row"
                   spacing={2}
                   alignItems="center"
@@ -877,29 +959,30 @@ export default function Categorization() {
                   <Stack
                     direction="row"
                     spacing={0.5}
-                    flexWrap="wrap"
                     useFlexGap
-                    sx={{ flex: 1 }}
+                    sx={{ flex: 1, flexWrap: 'wrap' }}
                   >
-                    {g.children.map((c) => {
-                      const isGhost = !knownChildren.has(c)
-                      const childColor = colorByCategory.get(c)
+                    {g.children.map((childId) => {
+                      const resolved = resolveChild(childId)
+                      const isGhost = resolved.kind === 'ghost'
                       return (
                         <Tooltip
-                          key={c}
-                          title={isGhost ? 'This name no longer exists as a leaf or group' : ''}
+                          key={childId}
+                          title={
+                            isGhost ? 'This reference no longer points to a rule or group' : ''
+                          }
                         >
                           <Chip
-                            label={c}
+                            label={resolved.label}
                             size="small"
                             variant="outlined"
                             color={isGhost ? 'error' : 'default'}
                             sx={
-                              !isGhost && childColor
-                                ? { borderColor: childColor, color: childColor }
+                              !isGhost && resolved.color
+                                ? { borderColor: resolved.color, color: resolved.color }
                                 : undefined
                             }
-                            onDelete={() => removeChildFromGroup(g.name, c)}
+                            onDelete={() => removeChildFromGroup(g.id, childId)}
                           />
                         </Tooltip>
                       )
@@ -910,7 +993,8 @@ export default function Categorization() {
                         options={childOptions}
                         value={null}
                         blurOnSelect
-                        onChange={(_, v) => v && addChildToGroup(g.name, v)}
+                        onChange={(_, v) => v && addChildToGroup(g.id, v)}
+                        getOptionLabel={(id) => resolveChild(id).label}
                         sx={{ minWidth: 180 }}
                         renderInput={(params) => (
                           <TextField {...params} placeholder="+ add child" variant="standard" />
@@ -919,7 +1003,11 @@ export default function Categorization() {
                     )}
                   </Stack>
                   <Tooltip title="Delete group">
-                    <IconButton size="small" onClick={() => removeGroup(g.name)}>
+                    <IconButton
+                      size="small"
+                      onClick={() => removeGroup(g.id)}
+                      sx={{ flexShrink: 0 }}
+                    >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
@@ -935,14 +1023,14 @@ export default function Categorization() {
   )
 }
 
-function KeywordEditor({
-  keywords,
+function PatternEditor({
+  patterns,
   onAdd,
   onRemove,
 }: {
-  keywords: string[]
-  onAdd: (k: string) => void
-  onRemove: (k: string) => void
+  patterns: string[]
+  onAdd: (p: string) => void
+  onRemove: (p: string) => void
 }) {
   const [draft, setDraft] = useState('')
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
@@ -962,7 +1050,7 @@ function KeywordEditor({
       <TextField
         size="small"
         variant="standard"
-        placeholder="+ add keyword"
+        placeholder="+ add pattern"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
@@ -978,10 +1066,10 @@ function KeywordEditor({
         size="small"
         variant="text"
         onClick={(e) => setAnchorEl(e.currentTarget)}
-        disabled={keywords.length === 0}
+        disabled={patterns.length === 0}
         sx={{ textTransform: 'none', whiteSpace: 'nowrap', minWidth: 0 }}
       >
-        {keywords.length} {keywords.length === 1 ? 'keyword' : 'keywords'}
+        {patterns.length} {patterns.length === 1 ? 'pattern' : 'patterns'}
       </Button>
       <Popover
         open={Boolean(anchorEl)}
@@ -992,13 +1080,16 @@ function KeywordEditor({
       >
         <Box sx={{ p: 1.5, maxWidth: 480 }}>
           <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            {keywords.map((k) => (
+            {patterns.map((p) => (
               <Chip
-                key={k}
-                label={k}
+                key={p}
+                label={p}
                 size="small"
                 variant="outlined"
-                onDelete={() => onRemove(k)}
+                onDelete={() => onRemove(p)}
+                sx={{
+                  '& .MuiChip-label': { userSelect: 'text', cursor: 'text' },
+                }}
               />
             ))}
           </Stack>

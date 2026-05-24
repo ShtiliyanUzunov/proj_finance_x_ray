@@ -181,7 +181,7 @@ def transaction_conflicts(
     """Return transactions matched by more than one rule.
 
     These are the rows where the user's rules overlap — they need to be
-    resolved by tightening keywords, narrowing columns, or reordering rule
+    resolved by tightening patterns, narrowing columns, or reordering rule
     priority so the intended rule wins.
     """
     from_date = _parse_date_param(from_, "from")
@@ -206,7 +206,7 @@ def transaction_conflicts(
                 continue
             txn = _build_transaction(p, schema, row_idx, row, d, matches)
             txn["matched_rules"] = [
-                {"id": m.rule_id, "category": m.category, "keywords": rule_by_id[m.rule_id].keywords}
+                {"id": m.rule_id, "category": m.category, "patterns": rule_by_id[m.rule_id].patterns}
                 for m in matches
                 if m.rule_id in rule_by_id
             ]

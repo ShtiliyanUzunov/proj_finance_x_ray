@@ -38,55 +38,68 @@ def save_groups(groups: list[dict]) -> None:
 def detect_cycle(groups: list[Group]) -> list[str] | None:
     """Return the cycle as a list of group names if one exists, else None.
 
-    Uses DFS with three-state coloring (WHITE/GRAY/BLACK). Children that do not
-    refer to a known group are treated as leaves and ignored — they cannot
-    participate in a cycle by definition.
+    Cycle detection walks group→group references via IDs (children that are not
+    a known group ID — i.e. rule IDs or ghosts — are leaves and can't participate
+    in a cycle). The returned list is rendered with names for human consumption.
     """
-    by_name: dict[str, list[str]] = {g.name: list(g.children) for g in groups}
+    by_id: dict[str, list[str]] = {g.id: list(g.children) for g in groups}
+    name_by_id: dict[str, str] = {g.id: g.name for g in groups}
     WHITE, GRAY, BLACK = 0, 1, 2
-    color: dict[str, int] = {name: WHITE for name in by_name}
+    color: dict[str, int] = {gid: WHITE for gid in by_id}
 
-    def dfs(name: str, path: list[str]) -> list[str] | None:
-        if name not in by_name:
+    def dfs(gid: str, path: list[str]) -> list[str] | None:
+        if gid not in by_id:
             return None
-        if color[name] == GRAY:
-            return path + [name]
-        if color[name] == BLACK:
+        if color[gid] == GRAY:
+            return path + [name_by_id[gid]]
+        if color[gid] == BLACK:
             return None
-        color[name] = GRAY
-        next_path = path + [name]
-        for child in by_name[name]:
+        color[gid] = GRAY
+        next_path = path + [name_by_id[gid]]
+        for child in by_id[gid]:
             cycle = dfs(child, next_path)
             if cycle is not None:
                 return cycle
-        color[name] = BLACK
+        color[gid] = BLACK
         return None
 
-    for name in by_name:
-        if color[name] == WHITE:
-            cycle = dfs(name, [])
+    for gid in by_id:
+        if color[gid] == WHITE:
+            cycle = dfs(gid, [])
             if cycle is not None:
                 return cycle
     return None
 
 
-def validate_groups(groups: list[Group], leaf_names: set[str]) -> None:
-    """Raise ValueError with a human-readable message on any structural problem."""
-    seen: set[str] = set()
+def validate_groups(groups: list[Group]) -> None:
+    """Raise ValueError with a human-readable message on any structural problem.
+
+    Now that children are IDs, group names no longer need to be globally unique
+    against rule categories — references are unambiguous. We still enforce
+    unique IDs and unique names (the latter is purely a UX/clarity guard).
+    """
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
     for g in groups:
+        gid = g.id.strip()
+        if not gid:
+            raise ValueError("Group id cannot be empty")
+        if gid != g.id:
+            raise ValueError(f"Group id '{g.id}' has leading/trailing whitespace")
+        if gid in seen_ids:
+            raise ValueError(f"Duplicate group id: '{gid}'")
+        seen_ids.add(gid)
+
         name = g.name.strip()
         if not name:
             raise ValueError("Group name cannot be empty")
         if name != g.name:
             raise ValueError(f"Group name '{g.name}' has leading/trailing whitespace")
-        if name in seen:
+        if name in seen_names:
             raise ValueError(f"Duplicate group name: '{name}'")
-        seen.add(name)
-        if name in leaf_names:
-            raise ValueError(
-                f"Group name '{name}' collides with a rule category — pick a different name"
-            )
-        if name in g.children:
+        seen_names.add(name)
+
+        if gid in g.children:
             raise ValueError(f"Group '{name}' cannot contain itself as a child")
 
     cycle = detect_cycle(groups)

@@ -32,6 +32,7 @@ import {
 import TransactionDetailsPanel, {
   CREDIT_COLOR,
   DEBIT_COLOR,
+  amountFmt,
 } from './TransactionDetailsPanel'
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -74,44 +75,40 @@ const LEFT_MARGIN = 44
 const RIGHT_MARGIN = 8
 const PANEL_WIDTH = 440
 
-// Encoded as `cat:<name>` or `group:<name>` so MUI Select can use a flat string value.
+// Encoded as `rule:<id>` or `group:<id>` so MUI Select can use a flat string value.
 const FILTER_ALL = ''
 
-function parseFilter(value: string): { type: 'cat' | 'group'; name: string } | null {
+function parseFilter(value: string): { type: 'rule' | 'group'; id: string } | null {
   if (!value) return null
   const idx = value.indexOf(':')
   if (idx < 0) return null
   const type = value.slice(0, idx)
-  if (type !== 'cat' && type !== 'group') return null
-  return { type, name: value.slice(idx + 1) }
+  if (type !== 'rule' && type !== 'group') return null
+  return { type, id: value.slice(idx + 1) }
 }
 
-// Walk a group's children to the set of leaf category names it ultimately resolves to.
-// Unknown children (not a group, not a known leaf) are treated as leaves — matches
-// server-side semantics in services/groups.py.
-function resolveGroupLeaves(
-  name: string,
-  groupsByName: Map<string, string[]>,
-  leafNames: Set<string>,
+// Walk a group's children to the set of leaf rule IDs it ultimately resolves to.
+// Children that aren't group IDs are treated as leaves — matches server-side
+// semantics in services/groups.py. The `ruleIds` filter drops ghosts so a stale
+// child can't accidentally claim a rule that was deleted.
+function resolveGroupLeafRuleIds(
+  groupId: string,
+  groupsById: Map<string, string[]>,
+  ruleIds: Set<string>,
 ): Set<string> {
   const result = new Set<string>()
   const visited = new Set<string>()
-  const walk = (n: string) => {
-    if (visited.has(n)) return
-    visited.add(n)
-    const children = groupsByName.get(n)
+  const walk = (id: string) => {
+    if (visited.has(id)) return
+    visited.add(id)
+    const children = groupsById.get(id)
     if (!children) {
-      result.add(n)
+      if (ruleIds.has(id)) result.add(id)
       return
     }
-    for (const child of children) {
-      if (groupsByName.has(child)) walk(child)
-      else result.add(child)
-    }
+    for (const child of children) walk(child)
   }
-  walk(name)
-  // Drop names that don't correspond to any real category (defensive against stale group refs).
-  for (const n of [...result]) if (!leafNames.has(n)) result.delete(n)
+  walk(groupId)
   return result
 }
 
@@ -168,25 +165,36 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
     return () => ro.disconnect()
   }, [])
 
-  const leafNames = useMemo(() => new Set(rules.map((r) => r.category)), [rules])
-  const groupsByName = useMemo(
-    () => new Map(groups.map((g) => [g.name, g.children] as const)),
+  const ruleIds = useMemo(() => new Set(rules.map((r) => r.id)), [rules])
+  const ruleById = useMemo(() => new Map(rules.map((r) => [r.id, r] as const)), [rules])
+  const groupById = useMemo(() => new Map(groups.map((g) => [g.id, g] as const)), [groups])
+  const groupsById = useMemo(
+    () => new Map(groups.map((g) => [g.id, g.children] as const)),
     [groups],
   )
 
   const filter = parseFilter(filterValue)
 
-  // Set of leaf category names the filter resolves to. null = no filter (show everything).
-  const filterLeaves = useMemo(() => {
+  // The set of rule IDs the filter resolves to (null = no filter). Transactions
+  // match the filter if any of their `matched_rule_ids` is in this set.
+  const filterRuleIds = useMemo(() => {
     if (!filter) return null
-    if (filter.type === 'cat') return new Set([filter.name])
-    return resolveGroupLeaves(filter.name, groupsByName, leafNames)
-  }, [filter?.type, filter?.name, groupsByName, leafNames])
+    if (filter.type === 'rule') return new Set([filter.id])
+    return resolveGroupLeafRuleIds(filter.id, groupsById, ruleIds)
+  }, [filter?.type, filter?.id, groupsById, ruleIds])
+
+  const filterLabel = useMemo(() => {
+    if (!filter) return null
+    if (filter.type === 'rule') return ruleById.get(filter.id)?.category ?? filter.id
+    return groupById.get(filter.id)?.name ?? filter.id
+  }, [filter?.type, filter?.id, ruleById, groupById])
 
   const filteredTransactions = useMemo(() => {
-    if (!filterLeaves) return transactions
-    return transactions.filter((t) => t.category !== null && filterLeaves.has(t.category))
-  }, [transactions, filterLeaves])
+    if (!filterRuleIds) return transactions
+    return transactions.filter((t) =>
+      t.matched_rule_ids.some((id) => filterRuleIds.has(id)),
+    )
+  }, [transactions, filterRuleIds])
 
   const txnsByPeriod = useMemo(() => {
     const map = new Map<string, Transaction[]>()
@@ -203,7 +211,7 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
   // what shows in the side panel. Without a filter, keep using the server-computed series
   // (it includes uncategorized rows, which the client-side derivation would silently drop).
   const chartItems = useMemo<TimelinePoint[]>(() => {
-    if (!filterLeaves) return items
+    if (!filterRuleIds) return items
     const periods = [...txnsByPeriod.keys()].sort()
     return periods.map((period) => {
       let debit = 0
@@ -214,7 +222,7 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
       }
       return { period, debit, credit }
     })
-  }, [filterLeaves, items, txnsByPeriod])
+  }, [filterRuleIds, items, txnsByPeriod])
 
   useEffect(() => {
     onMeta?.({ bucket, count: chartItems.length })
@@ -233,9 +241,27 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
   const maxWidth = chartItems.length * MAX_GROUP_WIDTH[bucket] + CHART_PADDING
   const chartWidth = Math.min(Math.max(containerWidth || minWidth, minWidth), maxWidth)
 
-  const series: { data: number[]; label: string; color: string }[] = []
-  if (showDebit) series.push({ data: chartItems.map((d) => d.debit), label: 'Debit', color: DEBIT_COLOR })
-  if (showCredit) series.push({ data: chartItems.map((d) => d.credit), label: 'Credit', color: CREDIT_COLOR })
+  const series: {
+    data: number[]
+    label: string
+    color: string
+    valueFormatter: (v: number | null) => string
+  }[] = []
+  const fmt = (v: number | null) => (v == null ? '' : amountFmt.format(v))
+  if (showDebit)
+    series.push({
+      data: chartItems.map((d) => d.debit),
+      label: 'Debit',
+      color: DEBIT_COLOR,
+      valueFormatter: fmt,
+    })
+  if (showCredit)
+    series.push({
+      data: chartItems.map((d) => d.credit),
+      label: 'Credit',
+      color: CREDIT_COLOR,
+      valueFormatter: fmt,
+    })
 
   const boundaries = bucket === 'day' ? monthBoundaries(chartItems) : []
 
@@ -302,16 +328,18 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
               </MenuItem>
               {groups.length > 0 && <ListSubheader>Groups</ListSubheader>}
               {groups.map((g) => (
-                <MenuItem key={`group:${g.name}`} value={`group:${g.name}`}>
+                <MenuItem key={`group:${g.id}`} value={`group:${g.id}`}>
                   {g.name}
                 </MenuItem>
               ))}
-              {leafNames.size > 0 && <ListSubheader>Categories</ListSubheader>}
-              {[...leafNames].sort().map((name) => (
-                <MenuItem key={`cat:${name}`} value={`cat:${name}`}>
-                  {name}
-                </MenuItem>
-              ))}
+              {rules.length > 0 && <ListSubheader>Categories</ListSubheader>}
+              {[...rules]
+                .sort((a, b) => a.category.localeCompare(b.category))
+                .map((r) => (
+                  <MenuItem key={`rule:${r.id}`} value={`rule:${r.id}`}>
+                    {r.category}
+                  </MenuItem>
+                ))}
             </Select>
           </FormControl>
         </Stack>
@@ -325,7 +353,7 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
         ) : chartItems.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {filter
-              ? `No transactions matched “${filter.name}” in the selected range.`
+              ? `No transactions matched “${filterLabel}” in the selected range.`
               : 'No dated transactions in the selected range.'}
           </Typography>
         ) : series.length === 0 ? (
@@ -355,7 +383,7 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
                 ]}
                 series={series}
                 margin={{ left: LEFT_MARGIN, right: RIGHT_MARGIN, top: 8, bottom: 28 }}
-                slotProps={{ tooltip: { trigger: 'none' } }}
+                slotProps={{ tooltip: { trigger: 'axis' } }}
                 sx={{ cursor: 'pointer' }}
               >
                 {boundaries.map((b) => (

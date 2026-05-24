@@ -1,33 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
+  Alert,
   Box,
-  Typography,
+  Button,
+  Checkbox,
+  CircularProgress,
+  Divider,
+  FormControl,
+  FormControlLabel,
+  IconButton,
+  InputAdornment,
+  InputLabel,
+  ListItemText,
+  Menu,
+  MenuItem,
   Paper,
-  TextField,
+  Select,
   Stack,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
-  TableRow,
   TablePagination,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Alert,
-  CircularProgress,
-  InputAdornment,
-  Button,
-  Menu,
-  FormControlLabel,
-  Checkbox,
-  Divider,
+  TableRow,
   TableSortLabel,
-  IconButton,
+  TextField,
   Tooltip,
+  Typography,
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
 import ViewColumnIcon from '@mui/icons-material/ViewColumn'
@@ -66,7 +67,16 @@ import {
 } from '../api'
 
 const CATEGORY_COLUMN_LABEL = 'Category'
+const FILE_COLUMN_LABEL = 'File'
 const UNCATEGORIZED_LABEL = 'None'
+
+// Per-row metadata used by color lookup + categorize action. Plain string[] rows
+// stay the natural shape for the existing sort/filter/search machinery; the
+// metadata is kept in a side WeakMap keyed by the row reference.
+interface RowMeta {
+  file: string
+  sourceIdx: number
+}
 
 interface RowCategory {
   category: string | null
@@ -101,27 +111,29 @@ function cleanCell(s: string): string {
   return out.replace(/\s+/g, ' ').trim()
 }
 
+// Hidden columns are a global per-column-name preference: hiding "Описание"
+// once keeps it hidden whenever it appears, regardless of which file(s) the
+// user has selected. Stored as a flat string[] in localStorage. (Older versions
+// of this view stored a per-file map under the same key; we treat malformed or
+// non-array reads as empty to migrate gracefully.)
 const HIDDEN_COLS_KEY = 'inspect.hiddenColumns'
 
-function readHiddenMap(): Record<string, string[]> {
+function readHidden(): string[] {
   try {
     const raw = localStorage.getItem(HIDDEN_COLS_KEY)
-    if (!raw) return {}
+    if (!raw) return []
     const parsed = JSON.parse(raw)
-    return typeof parsed === 'object' && parsed !== null ? parsed : {}
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === 'string')
+      : []
   } catch {
-    return {}
+    return []
   }
 }
 
-function writeHiddenFor(file: string, hidden: string[]) {
-  const map = readHiddenMap()
-  if (hidden.length === 0) {
-    delete map[file]
-  } else {
-    map[file] = hidden
-  }
-  localStorage.setItem(HIDDEN_COLS_KEY, JSON.stringify(map))
+function writeHidden(hidden: string[]) {
+  if (hidden.length === 0) localStorage.removeItem(HIDDEN_COLS_KEY)
+  else localStorage.setItem(HIDDEN_COLS_KEY, JSON.stringify(hidden))
 }
 
 export default function Inspection() {
@@ -130,8 +142,10 @@ export default function Inspection() {
   const [searchParams, setSearchParams] = useSearchParams()
   const rowParam = searchParams.get('row')
   const [files, setFiles] = useState<CsvFile[]>([])
-  const [contents, setContents] = useState<CsvContents | null>(null)
-  const [categoriesByRow, setCategoriesByRow] = useState<Map<number, RowCategory>>(new Map())
+  const [contentsByFile, setContentsByFile] = useState<Record<string, CsvContents>>({})
+  const [categoriesByFile, setCategoriesByFile] = useState<
+    Record<string, Map<number, RowCategory>>
+  >({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -144,7 +158,21 @@ export default function Inspection() {
   const [highlightedRow, setHighlightedRow] = useState<number | null>(null)
   const highlightedRowRef = useRef<HTMLTableRowElement | null>(null)
 
-  const selected = nameParam ?? ''
+  // Route param is a comma-joined list of URL-encoded filenames, so deep links
+  // from Timeline/Overview (single file) and the multi-select dropdown share
+  // one routing scheme.
+  const selectedFiles = useMemo<string[]>(
+    () =>
+      nameParam
+        ? nameParam
+            .split(',')
+            .map((s) => decodeURIComponent(s))
+            .filter(Boolean)
+        : [],
+    [nameParam],
+  )
+  const selectedKey = selectedFiles.join(',')
+  const isMulti = selectedFiles.length > 1
 
   useEffect(() => {
     listCsvs()
@@ -158,49 +186,67 @@ export default function Inspection() {
   }, [nameParam, navigate])
 
   useEffect(() => {
-    if (!selected) {
-      setContents(null)
-      setCategoriesByRow(new Map())
+    if (selectedFiles.length === 0) {
+      setContentsByFile({})
+      setCategoriesByFile({})
       return
     }
     setLoading(true)
     setError(null)
     setPage(0)
-    Promise.all([getCsv(selected), getCsvCategories(selected)])
-      .then(([csv, cats]) => {
-        setContents(csv)
-        const map = new Map<number, RowCategory>()
-        for (const c of cats.categories) {
-          map.set(c.row_index, { category: c.category, color: c.color })
+    Promise.all(
+      selectedFiles.map((name) =>
+        Promise.all([getCsv(name), getCsvCategories(name)]).then(
+          ([csv, cats]) => ({ name, csv, cats }),
+        ),
+      ),
+    )
+      .then((results) => {
+        const nextContents: Record<string, CsvContents> = {}
+        const nextCats: Record<string, Map<number, RowCategory>> = {}
+        for (const { name, csv, cats } of results) {
+          nextContents[name] = csv
+          const map = new Map<number, RowCategory>()
+          for (const c of cats.categories) {
+            map.set(c.row_index, { category: c.category, color: c.color })
+          }
+          nextCats[name] = map
         }
-        setCategoriesByRow(map)
+        setContentsByFile(nextContents)
+        setCategoriesByFile(nextCats)
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false))
-  }, [selected])
+  }, [selectedKey])
 
-  // Load hidden-column selection for the currently selected file
+  // Load the global hidden-columns set once on mount. It's a per-column-name
+  // preference, so it doesn't depend on which file(s) are selected.
   useEffect(() => {
-    if (!selected) {
-      setHidden(new Set())
-      return
-    }
-    setHidden(new Set(readHiddenMap()[selected] ?? []))
+    setHidden(new Set(readHidden()))
+  }, [])
+
+  // Selection changes invalidate the active sort (column indices differ between
+  // file combos) but should NOT touch the hidden-columns preference.
+  useEffect(() => {
     setSortCol(null)
     setSortDir('asc')
-  }, [selected])
+  }, [selectedKey])
 
-  // Jump to a specific row when ?row= is present: reset filter/sort, page to it, highlight it.
+  // Jump to a specific row when ?row= is present: only meaningful in single-file
+  // mode (deep links from Timeline/Overview always target one file).
   useEffect(() => {
-    if (!contents || rowParam === null) return
+    if (isMulti || rowParam === null) return
+    const only = selectedFiles[0]
+    const csv = only ? contentsByFile[only] : undefined
+    if (!csv) return
     const idx = parseInt(rowParam, 10)
-    if (Number.isNaN(idx) || idx < 0 || idx >= contents.rows.length) return
+    if (Number.isNaN(idx) || idx < 0 || idx >= csv.rows.length) return
     setSearch('')
     setSortCol(null)
     setSortDir('asc')
     setPage(Math.floor(idx / perPage))
     setHighlightedRow(idx)
-  }, [contents, rowParam, perPage])
+  }, [contentsByFile, rowParam, perPage, isMulti, selectedFiles])
 
   // Scroll the highlighted row into view once it has rendered.
   useEffect(() => {
@@ -223,34 +269,66 @@ export default function Inspection() {
     return () => clearTimeout(t)
   }, [highlightedRow, searchParams, setSearchParams])
 
-  // The synthetic Category column is appended to every row + the header so all
-  // existing sort/filter/hide/paginate machinery treats it like any other
-  // column. Color is looked up separately at render time via sourceIndexByRow.
-  const cleanedRows = useMemo(
-    () =>
-      contents
-        ? contents.rows.map((row, i) => [
-            ...row.map(cleanCell),
-            categoriesByRow.get(i)?.category ?? UNCATEGORIZED_LABEL,
-          ])
-        : [],
-    [contents, categoriesByRow],
-  )
+  // Unified columns across all selected files: File at the front, ordered union
+  // of data columns (first-seen-in-first-file order, then new ones appended),
+  // Category at the end. Synthetic File/Category columns participate in the
+  // existing sort/filter/hide/paginate machinery just like any data column.
+  const cleanedColumns = useMemo(() => {
+    if (selectedFiles.length === 0) return []
+    const seen = new Set<string>()
+    const cols: string[] = []
+    for (const name of selectedFiles) {
+      const csv = contentsByFile[name]
+      if (!csv) continue
+      for (const c of csv.columns.map(cleanCell)) {
+        if (!seen.has(c)) {
+          seen.add(c)
+          cols.push(c)
+        }
+      }
+    }
+    return [FILE_COLUMN_LABEL, ...cols, CATEGORY_COLUMN_LABEL]
+  }, [selectedFiles, contentsByFile])
 
-  const cleanedColumns = useMemo(
-    () =>
-      contents ? [...contents.columns.map(cleanCell), CATEGORY_COLUMN_LABEL] : [],
-    [contents],
-  )
-
-  // Reverse map row reference → source CSV index. Needed because sort/filter
-  // re-order rows, so position in the rendered list no longer matches the row
-  // index that categoriesByRow is keyed on.
-  const sourceIndexByRow = useMemo(() => {
-    const m = new Map<string[], number>()
-    cleanedRows.forEach((r, i) => m.set(r, i))
+  // Per-file column→union-index mapping so each row's cells can be slotted into
+  // the unified layout (gaps left as empty strings when a file lacks a column).
+  // Index 0 is reserved for File, last is reserved for Category, so data column
+  // indices in the union start at 1.
+  const dataColumnByName = useMemo(() => {
+    const m = new Map<string, number>()
+    cleanedColumns.forEach((c, i) => {
+      if (c !== FILE_COLUMN_LABEL && c !== CATEGORY_COLUMN_LABEL) m.set(c, i)
+    })
     return m
-  }, [cleanedRows])
+  }, [cleanedColumns])
+
+  // Rows + metadata. The WeakMap keys by row reference so color lookup and
+  // categorize keep working after sort/filter reorder things.
+  const { cleanedRows, rowMeta } = useMemo(() => {
+    const rows: string[][] = []
+    const meta = new WeakMap<string[], RowMeta>()
+    if (cleanedColumns.length === 0) return { cleanedRows: rows, rowMeta: meta }
+    for (const name of selectedFiles) {
+      const csv = contentsByFile[name]
+      if (!csv) continue
+      const fileCols = csv.columns.map(cleanCell)
+      const cats = categoriesByFile[name]
+      csv.rows.forEach((srcRow, srcIdx) => {
+        const out = new Array<string>(cleanedColumns.length).fill('')
+        out[0] = name
+        fileCols.forEach((col, ci) => {
+          const targetIdx = dataColumnByName.get(col)
+          if (targetIdx !== undefined) out[targetIdx] = cleanCell(srcRow[ci] ?? '')
+        })
+        out[cleanedColumns.length - 1] = cats?.get(srcIdx)?.category ?? UNCATEGORIZED_LABEL
+        rows.push(out)
+        meta.set(out, { file: name, sourceIdx: srcIdx })
+      })
+    }
+    return { cleanedRows: rows, rowMeta: meta }
+  }, [selectedFiles, contentsByFile, categoriesByFile, cleanedColumns, dataColumnByName])
+
+  const fileColIdx = 0
 
   const categoryColIdx = cleanedColumns.length - 1
 
@@ -280,7 +358,7 @@ export default function Inspection() {
   }, [cleanedColumns])
 
   const totals = useMemo(() => {
-    if (!contents || cleanedColumns.length === 0) return null
+    if (cleanedRows.length === 0 || cleanedColumns.length === 0) return null
     const debitIdxs = Array.from(semanticCols.debit)
     const creditIdxs = Array.from(semanticCols.credit)
     if (debitIdxs.length === 0 && creditIdxs.length === 0) return null
@@ -313,7 +391,7 @@ export default function Inspection() {
       debitCols: debitIdxs.map((i) => cleanedColumns[i]),
       creditCols: creditIdxs.map((i) => cleanedColumns[i]),
     }
-  }, [contents, cleanedColumns, cleanedRows, semanticCols])
+  }, [cleanedColumns, cleanedRows, semanticCols])
 
   const sorted = useMemo(() => {
     if (sortCol === null) return filtered
@@ -341,28 +419,41 @@ export default function Inspection() {
       const next = new Set(prev)
       if (next.has(col)) next.delete(col)
       else next.add(col)
-      writeHiddenFor(selected, Array.from(next))
+      writeHidden(Array.from(next))
       return next
     })
   }
 
+  // "Hide all" only hides columns present in the current union — hidden state
+  // for columns from other files stays as-is. "Show all" likewise only un-hides
+  // what's currently visible, preserving prior choices for absent columns.
   function setAllColumns(hide: boolean) {
-    const next = hide ? new Set(cleanedColumns) : new Set<string>()
-    setHidden(next)
-    writeHiddenFor(selected, Array.from(next))
+    setHidden((prev) => {
+      const next = new Set(prev)
+      for (const c of cleanedColumns) {
+        if (hide) next.add(c)
+        else next.delete(c)
+      }
+      writeHidden(Array.from(next))
+      return next
+    })
   }
 
-  // Bridge to the Categorization view: drop the row's 2nd and 3rd columns
-  // (typically the description and counterparty) into the keyword input *as
-  // draft text*, not as committed chips. The user can then edit and decide
-  // whether to keep them before pressing Enter.
+  // Bridge to the Categorization view: drop the source row's 2nd and 3rd
+  // columns (typically the description and counterparty) into the pattern
+  // input *as draft text*. We look the original cells up via rowMeta so the
+  // synthetic File/Category columns and any union gaps don't shift the
+  // positions we sample from.
   function handleCategorize(row: string[]) {
-    const draft = [row[1], row[2]]
+    const meta = rowMeta.get(row)
+    const src = meta ? contentsByFile[meta.file]?.rows[meta.sourceIdx] : undefined
+    const cells = src ?? row
+    const draft = [cells[1], cells[2]]
       .filter((s): s is string => typeof s === 'string')
-      .map((s) => s.trim().toLowerCase())
+      .map((s) => cleanCell(s).toLowerCase())
       .filter((s) => s.length > 0)
       .join(', ')
-    navigate('/categorization', { state: { prefillKeywordDraft: draft } })
+    navigate('/categorization', { state: { prefillPatternDraft: draft } })
   }
 
   return (
@@ -374,18 +465,52 @@ export default function Inspection() {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 280 }}>
-          <InputLabel>File</InputLabel>
+        <FormControl size="small" sx={{ minWidth: 280, maxWidth: 420 }}>
+          <InputLabel>Files</InputLabel>
           <Select
-            value={selected}
-            label="File"
-            onChange={(e) => navigate(`/inspect/${encodeURIComponent(e.target.value)}`)}
+            multiple
+            value={selectedFiles}
+            label="Files"
+            onChange={(e) => {
+              const value = e.target.value
+              const next = typeof value === 'string' ? value.split(',') : value
+              if (next.length === 0) {
+                navigate('/inspect')
+              } else {
+                navigate(`/inspect/${next.map(encodeURIComponent).join(',')}`)
+              }
+            }}
             disabled={files.length === 0}
+            renderValue={(selected) =>
+              selected.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  (no files)
+                </Typography>
+              ) : (
+                <Box
+                  sx={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontSize: '0.875rem',
+                  }}
+                  title={selected.join(', ')}
+                >
+                  {selected.length === 1 ? selected[0] : `${selected.length} files`}
+                </Box>
+              )
+            }
           >
-            {files.length === 0 && <MenuItem value="">No files uploaded</MenuItem>}
+            {files.length === 0 && <MenuItem disabled value="">No files uploaded</MenuItem>}
             {files.map((f) => (
-              <MenuItem key={f.name} value={f.name}>
-                {f.name} ({f.rows} rows)
+              <MenuItem key={f.name} value={f.name} dense>
+                <Checkbox size="small" checked={selectedFiles.includes(f.name)} sx={{ p: 0.5 }} />
+                <ListItemText
+                  primary={f.name}
+                  secondary={`${f.rows} rows`}
+                  primaryTypographyProps={{ variant: 'body2' }}
+                  secondaryTypographyProps={{ variant: 'caption' }}
+                />
               </MenuItem>
             ))}
           </Select>
@@ -399,7 +524,7 @@ export default function Inspection() {
             setSearch(e.target.value)
             setPage(0)
           }}
-          disabled={!contents}
+          disabled={cleanedRows.length === 0}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -413,7 +538,7 @@ export default function Inspection() {
           size="small"
           startIcon={<ViewColumnIcon />}
           onClick={(e) => setColMenuAnchor(e.currentTarget)}
-          disabled={!contents || cleanedColumns.length === 0}
+          disabled={cleanedColumns.length === 0}
         >
           Columns ({visibleIndexes.length}/{cleanedColumns.length})
         </Button>
@@ -445,12 +570,14 @@ export default function Inspection() {
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}>
           <CircularProgress />
         </Box>
-      ) : !contents ? (
+      ) : cleanedRows.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
           <Typography variant="body2">
             {files.length === 0
               ? 'Upload a CSV first to inspect.'
-              : 'Select a file to inspect.'}
+              : selectedFiles.length === 0
+                ? 'Select one or more files to inspect.'
+                : 'No rows in the selected files.'}
           </Typography>
         </Paper>
       ) : visibleIndexes.length === 0 ? (
@@ -515,19 +642,19 @@ export default function Inspection() {
                       const isDebit = semanticCols.debit.has(idx)
                       const isCredit = semanticCols.credit.has(idx)
                       const isCategory = idx === categoryColIdx
+                      const isFile = idx === fileColIdx
                       const cell = row[idx]
                       const hasValue = isDebit || isCredit ? !Number.isNaN(parseAmount(cell)) : false
-                      const sourceIdx = isCategory ? sourceIndexByRow.get(row) : undefined
+                      const meta = isCategory ? rowMeta.get(row) : undefined
                       const categoryColor =
-                        isCategory && sourceIdx !== undefined
-                          ? categoriesByRow.get(sourceIdx)?.color
-                          : null
+                        meta ? categoriesByFile[meta.file]?.get(meta.sourceIdx)?.color : null
                       return (
                         <TableCell
                           key={idx}
                           align={isDebit || isCredit ? 'right' : 'left'}
                           sx={{
                             fontVariantNumeric: isDebit || isCredit ? 'tabular-nums' : undefined,
+                            ...(isFile && { color: 'text.secondary', fontSize: '0.78rem', whiteSpace: 'nowrap' }),
                             ...(isDebit && hasValue && { color: 'error.main', fontWeight: 500 }),
                             ...(isCredit && hasValue && { color: 'success.main', fontWeight: 500 }),
                             ...(isCategory && categoryColor && {
@@ -596,10 +723,10 @@ export default function Inspection() {
         </Paper>
       )}
 
-      {contents && (
+      {cleanedRows.length > 0 && (
         <Paper variant="outlined" sx={{ mt: 3, p: 2 }}>
           <Typography variant="subtitle1" gutterBottom>
-            Summary
+            Summary {isMulti && `· ${selectedFiles.length} files`}
           </Typography>
           {totals === null ? (
             <Typography variant="body2" color="text.secondary">

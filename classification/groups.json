@@ -1,56 +1,59 @@
 [
   {
+    "id": "kp4r2x9a",
     "name": "Food",
     "children": [
-      "FANTASTICO",
-      "LIDL",
-      "Billa",
-      "Nablizo",
-      "BMS"
+      "8f00a1y6"
     ]
   },
   {
+    "id": "j7m3w8bn",
     "name": "Subscriptions",
     "children": [
-      "HBO",
-      "Google"
+      "d0qcnpre"
     ]
   },
   {
-    "name": "Kinder_Garden",
+    "id": "h2q6t1cd",
+    "name": "Kindergarden",
     "children": [
-      "Kindergarden"
+      "4ecra07g"
     ]
   },
   {
+    "id": "n5y8u3ef",
     "name": "Loans",
     "children": [
-      "DSK_Loan",
-      "Garage_rental"
+      "fqbri60m"
     ]
   },
   {
+    "id": "v0z9o4gh",
     "name": "Occasional",
     "children": [
-      "Remont-Varna"
+      "dbuvsiw2"
     ]
   },
   {
-    "name": "Monthly_bills",
+    "id": "b8x7l2ij",
+    "name": "Bills",
     "children": [
-      "Bills"
+      "tqvrd7pi",
+      "ndvnxlxv"
     ]
   },
   {
+    "id": "f3c1d6kl",
     "name": "Car",
     "children": [
-      "Fuel"
+      "ph6s8tf3"
     ]
   },
   {
-    "name": "Home-",
+    "id": "r6n4e9mn",
+    "name": "Home",
     "children": [
-      "Home"
+      "g5mttzqy"
     ]
   }
 ]
