@@ -4,8 +4,9 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
+from .. import index
 from ..models import RenameRequest
-from ..services.categorization import categorize_csv_file
+from ..services.categorization import color_by_category, match_transaction
 from ..services.csv_files import file_info, list_files, safe_csv_path, unique_path
 from ..services.rules import load_rule_models
 
@@ -19,6 +20,7 @@ async def upload_csv(file: UploadFile = File(...)):
     target = unique_path(file.filename)
     content = await file.read()
     target.write_bytes(content)
+    index.on_added(target)
     return file_info(target)
 
 
@@ -42,7 +44,18 @@ def rename_csv(name: str, body: RenameRequest):
         raise HTTPException(status_code=409, detail="A file with that name already exists")
     else:
         src.rename(dst)
+        index.on_renamed(src.name, dst.name)
     return file_info(dst)
+
+
+@router.delete("/csv/{name}")
+def delete_csv(name: str):
+    path = safe_csv_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    path.unlink()
+    index.on_removed(name)
+    return {"deleted": name}
 
 
 @router.get("/csv/{name}")
@@ -63,11 +76,25 @@ def get_csv(name: str):
 def get_csv_categories(name: str):
     """Per-row categorization for a single CSV file.
 
-    Returned in source-row order. Row indices are zero-based and align with
-    the indices used by `GET /csv/{name}` (i.e. the position in `rows[]`),
-    so the client can merge by row index without any extra bookkeeping.
+    Row indices align with positions in `GET /csv/{name}`'s `rows[]`, so the
+    client merges by row index without extra bookkeeping. Sourced from the
+    index; rows the mapper skipped (e.g. no parseable date) won't appear.
     """
     path = safe_csv_path(name)
     if not path.exists():
         raise HTTPException(status_code=404, detail="File not found")
-    return {"categories": categorize_csv_file(path, load_rule_models())}
+    rules = load_rule_models()
+    color_lookup = color_by_category(rules)
+    categories = []
+    for txn in index.transactions_for(name):
+        matches = match_transaction(rules, txn)
+        category = matches[0].category if matches else None
+        categories.append(
+            {
+                "row_index": txn.row_index,
+                "category": category,
+                "color": color_lookup.get(category) if category else None,
+                "matched_rule_ids": [m.rule_id for m in matches],
+            }
+        )
+    return {"categories": categories}

@@ -3,9 +3,9 @@
     "id": "8f00a1y6",
     "category": "FOOD",
     "columns": [
-      "Основание",
-      "Наредител/Получател",
-      "Номер сметка на наредителя / получателя"
+      "description",
+      "counterparty",
+      "counterparty_account"
     ],
     "patterns": [
       "fantastico",
@@ -36,9 +36,9 @@
     "id": "k5jen808",
     "category": "Restaurants",
     "columns": [
-      "Наредител/Получател",
-      "Номер сметка на наредителя / получателя",
-      "Основание"
+      "counterparty",
+      "counterparty_account",
+      "description"
     ],
     "patterns": [
       "sofia zala levski",
@@ -60,7 +60,7 @@
     "id": "4ecra07g",
     "category": "Kindergarden",
     "columns": [
-      "Наредител/Получател"
+      "counterparty"
     ],
     "patterns": [
       "доротея георгиева воева"
@@ -71,9 +71,9 @@
     "id": "d0qcnpre",
     "category": "Subscriptions",
     "columns": [
-      "Основание",
-      "Наредител/Получател",
-      "Номер сметка на наредителя / получателя"
+      "description",
+      "counterparty",
+      "counterparty_account"
     ],
     "patterns": [
       "google one",
@@ -90,9 +90,9 @@
     "id": "f1sfcvd3",
     "category": "Kids-lifestyle",
     "columns": [
-      "Основание",
-      "Наредител/Получател",
-      "Номер сметка на наредителя / получателя"
+      "description",
+      "counterparty",
+      "counterparty_account"
     ],
     "patterns": [
       "intersport",
@@ -109,12 +109,25 @@
     "color": "#1976d2"
   },
   {
+    "id": "18q30hqk",
+    "category": "Sports",
+    "columns": [
+      "description",
+      "counterparty",
+      "counterparty_account"
+    ],
+    "patterns": [
+      "samokov borosport ad"
+    ],
+    "color": "#19d29a"
+  },
+  {
     "id": "fqbri60m",
     "category": "DSK Loan",
     "columns": [
-      "Основание",
-      "Наредител/Получател",
-      "Номер сметка на наредителя / получателя"
+      "description",
+      "counterparty",
+      "counterparty_account"
     ],
     "patterns": [
       "плащане по заем към rl"
@@ -125,9 +138,9 @@
     "id": "imnioehk",
     "category": "Birthdays",
     "columns": [
-      "Наредител/Получател",
-      "Основание",
-      "Номер сметка на наредителя / получателя"
+      "counterparty",
+      "description",
+      "counterparty_account"
     ],
     "patterns": [
       "maxiland",
@@ -141,9 +154,9 @@
     "id": "dbuvsiw2",
     "category": "Remont-Varna",
     "columns": [
-      "Основание",
-      "Наредител/Получател",
-      "Номер сметка на наредителя / получателя"
+      "description",
+      "counterparty",
+      "counterparty_account"
     ],
     "patterns": [
       "zhivko lipchev",
@@ -162,7 +175,7 @@
     "id": "ndvnxlxv",
     "category": "Garage",
     "columns": [
-      "Наредител/Получател"
+      "counterparty"
     ],
     "patterns": [
       "dimtar grigorov bakalov"
@@ -173,9 +186,9 @@
     "id": "tqvrd7pi",
     "category": "Bills",
     "columns": [
-      "Основание",
-      "Наредител/Получател",
-      "Номер сметка на наредителя / получателя"
+      "description",
+      "counterparty",
+      "counterparty_account"
     ],
     "patterns": [
       "електрохолд продажби ад",
@@ -197,7 +210,7 @@
     "id": "ph6s8tf3",
     "category": "Car",
     "columns": [
-      "Наредител/Получател"
+      "counterparty"
     ],
     "patterns": [
       "shell",
@@ -212,7 +225,7 @@
     "id": "g5mttzqy",
     "category": "Home",
     "columns": [
-      "Наредител/Получател"
+      "counterparty"
     ],
     "patterns": [
       "dm bulgaria",
@@ -224,7 +237,8 @@
       "sinsay",
       "emag",
       "temu",
-      "english home"
+      "english home",
+      "aiko"
     ],
     "color": "#3f1008"
   },
@@ -232,9 +246,9 @@
     "id": "m8bir1s9",
     "category": "Medical",
     "columns": [
-      "Наредител/Получател",
-      "Основание",
-      "Номер сметка на наредителя / получателя"
+      "counterparty",
+      "description",
+      "counterparty_account"
     ],
     "patterns": [
       "sopharmacy",

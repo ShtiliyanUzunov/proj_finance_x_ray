@@ -1,19 +1,14 @@
 """Pure helpers for cleaning and parsing CSV cell content.
 
-These functions have no I/O and no dependencies on the rest of the app. They
-exist so router and service modules can share a single consistent interpretation
-of dates, amounts, and column headers across the various CSV formats we accept.
+Used by per-bank mappers in `domain.mappers` and by query-param parsing in
+the API routers. No I/O, no app state — trivially unit-testable.
 """
 
 from __future__ import annotations
 
-import csv
 import html
 import re
-from dataclasses import dataclass
 from datetime import date, datetime
-from pathlib import Path
-from typing import Iterator
 
 _TAG_RE = re.compile(r"<[^>]*>")
 _AMOUNT_RE = re.compile(r"^-?\d+(\.\d+)?$")
@@ -57,57 +52,3 @@ def parse_date(s: str) -> date | None:
         except ValueError:
             continue
     return None
-
-
-def detect_date_col(cols: list[str]) -> int | None:
-    candidates = [i for i, c in enumerate(cols) if "date" in c or "дата" in c or "datum" in c]
-    if not candidates:
-        return None
-    for i in candidates:
-        c = cols[i]
-        if "operation" in c or "transaction" in c or "транзакция" in c or "операц" in c:
-            return i
-    return candidates[0]
-
-
-@dataclass(frozen=True)
-class CsvSchema:
-    """Indices of semantic columns within a CSV's header row.
-
-    `headers_lower` is the full cleaned-and-lowercased header list. It's
-    included here so callers that need to match user-defined column names
-    (e.g. the categorization matcher) don't have to re-clean the header on
-    every row.
-    """
-
-    debit_idxs: list[int]
-    credit_idxs: list[int]
-    date_col: int | None
-    headers_lower: tuple[str, ...]
-
-
-def detect_schema(header: list[str]) -> CsvSchema:
-    cols = [clean_header(c) for c in header]
-    return CsvSchema(
-        debit_idxs=[i for i, c in enumerate(cols) if "debit" in c or "дебит" in c],
-        credit_idxs=[i for i, c in enumerate(cols) if "credit" in c or "кредит" in c],
-        date_col=detect_date_col(cols),
-        headers_lower=tuple(cols),
-    )
-
-
-def read_csv_rows(path: Path) -> Iterator[tuple[CsvSchema, int, list[str]]]:
-    """Yield (schema, row_index, row) for every data row in a CSV.
-
-    The schema is detected once from the header and emitted with each row so
-    callers don't have to thread it separately. Empty files yield nothing.
-    """
-    with path.open("r", encoding="utf-8", newline="", errors="replace") as f:
-        reader = csv.reader(f)
-        try:
-            header = next(reader)
-        except StopIteration:
-            return
-        schema = detect_schema(header)
-        for i, row in enumerate(reader):
-            yield schema, i, row

@@ -126,6 +126,12 @@ export default function Upload() {
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Only the default <strong>DSK</strong> mapper is supported for now.
+        Files in other bank formats will be marked as <em>unknown format</em>{' '}
+        and ignored by all views.
+      </Alert>
+
       <Paper
         variant="outlined"
         sx={{
@@ -206,6 +212,13 @@ export default function Upload() {
                         />
                       )}
                     </Box>
+                    <Chip
+                      label={f.mapper ?? 'unknown format'}
+                      size="small"
+                      variant="outlined"
+                      color={f.mapper ? 'primary' : 'warning'}
+                      sx={{ textTransform: 'uppercase', fontWeight: 500, letterSpacing: 0.5 }}
+                    />
                     <Chip label={`${f.rows} rows · ${formatBytes(f.size)}`} size="small" />
                     <IconButton
                       size="small"

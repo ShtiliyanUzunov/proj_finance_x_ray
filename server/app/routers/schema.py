@@ -1,36 +1,21 @@
-import csv
+"""Field names available on the internal Transaction model.
+
+The client's rule editor uses these as the picker for `rule.columns`. Returns
+every field on `Transaction` — the UI decides which ones are sensible to
+present as text-match targets.
+"""
+
+from __future__ import annotations
+
+from dataclasses import fields
 
 from fastapi import APIRouter
 
-from ..parsing import clean_text
-from ..services.csv_files import iter_csv_paths
+from ..domain.transaction import Transaction
 
 router = APIRouter(tags=["schema"])
 
 
 @router.get("/schema")
 def schema():
-    """Return the union of column names across all uploaded CSVs.
-
-    Columns are deduplicated case-insensitively after HTML/whitespace cleanup,
-    preserving the first original-case spelling encountered.
-    """
-    seen: dict[str, str] = {}
-    order: list[str] = []
-    for p in iter_csv_paths():
-        with p.open("r", encoding="utf-8", newline="", errors="replace") as f:
-            reader = csv.reader(f)
-            try:
-                header = next(reader)
-            except StopIteration:
-                continue
-        for raw in header:
-            cleaned = clean_text(raw)
-            if not cleaned:
-                continue
-            key = cleaned.lower()
-            if key in seen:
-                continue
-            seen[key] = cleaned
-            order.append(cleaned)
-    return {"columns": order}
+    return {"columns": [f.name for f in fields(Transaction)]}

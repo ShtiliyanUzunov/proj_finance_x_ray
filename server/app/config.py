@@ -12,3 +12,6 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 CLASSIFICATION_DIR = (SERVER_DIR.parent / "classification").resolve()
 CLASSIFICATION_DIR.mkdir(parents=True, exist_ok=True)
+
+MAPPERS_DIR = (SERVER_DIR.parent / "mappers").resolve()
+MAPPERS_DIR.mkdir(parents=True, exist_ok=True)

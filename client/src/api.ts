@@ -9,6 +9,9 @@ export interface CsvFile {
   credit: number | null
   date_min: string | null
   date_max: string | null
+  // Null when the server couldn't pick a mapper for this file (unknown bank
+  // format). UI shows it as a warning rather than a labeled chip.
+  mapper: string | null
 }
 
 export interface Summary {

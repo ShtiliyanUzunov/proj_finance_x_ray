@@ -37,16 +37,21 @@ server/
     main.py                # FastAPI() instance, middleware, router includes
     config.py              # DATA_DIR (CSV uploads) + CLASSIFICATION_DIR + env loading
     models.py              # Pydantic request/response schemas
-    parsing.py             # text/amount/date helpers, CsvSchema, read_csv_rows
+    parsing.py             # text/amount/date cleaning helpers
+    index.py               # in-memory Transaction index (built at startup)
+    domain/
+      transaction.py       # internal, bank-agnostic Transaction dataclass
+      mappers.py           # CSV → Transaction; loads ../../mappers/*.json
     services/
-      csv_files.py         # path safety, summarize, file_info, listing
+      csv_files.py         # path safety, file_info, listing
+      categorization.py    # rule matching against Transaction fields
       rules.py             # classification/rules.json load/save
       groups.py            # classification/groups.json load/save + validation
     routers/
       health.py            # /ping
       csv.py               # /csv*
       rules.py             # /rules
-      schema.py            # /schema
+      schema.py            # /schema (Transaction field names)
       transactions.py      # /summary, /timeline, /transactions
 ```
 
