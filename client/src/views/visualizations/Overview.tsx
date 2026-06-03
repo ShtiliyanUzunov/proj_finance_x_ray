@@ -274,7 +274,6 @@ export default function Overview({ from, to, panelTarget }: Props) {
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden',
         alignSelf: 'stretch',
         borderLeft: 1,
         borderColor: 'divider',
@@ -515,7 +514,6 @@ export default function Overview({ from, to, panelTarget }: Props) {
                           height: 6,
                           borderRadius: 3,
                           bgcolor: alpha(s.color, 0.15),
-                          overflow: 'hidden',
                         }}
                       >
                         <Box

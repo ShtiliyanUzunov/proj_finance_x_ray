@@ -127,7 +127,7 @@ export default function Visualization() {
         )}
       </Paper>
 
-      <Paper variant="outlined" sx={{ display: 'flex', alignItems: 'stretch', overflow: 'hidden' }}>
+      <Paper variant="outlined" sx={{ display: 'flex', alignItems: 'stretch' }}>
         <Box ref={leftSideRef} sx={{ flex: 1, minWidth: 0 }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
             <Tab label="Overview" />
@@ -157,7 +157,6 @@ export default function Visualization() {
           sx={{
             display: 'flex',
             maxHeight: leftSideHeight ?? undefined,
-            overflow: 'hidden',
           }}
         />
       </Paper>

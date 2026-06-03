@@ -15,3 +15,9 @@ CLASSIFICATION_DIR.mkdir(parents=True, exist_ok=True)
 
 MAPPERS_DIR = (SERVER_DIR.parent / "mappers").resolve()
 MAPPERS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Irrevocable BGN→EUR peg locked by the ECB ahead of Bulgaria's 2026 eurozone
+# entry: 1 EUR = 1.95583 BGN. Applied at parse time by mappers whose name ends
+# with "-bgn" so all internal amounts stay in EUR. Tweak here if the official
+# rate's representation ever needs more precision.
+BGN_TO_EUR_RATE = 1 / 1.95583

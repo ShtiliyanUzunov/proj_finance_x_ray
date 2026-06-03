@@ -17,7 +17,7 @@ import json
 import logging
 from pathlib import Path
 
-from ..config import MAPPERS_DIR
+from ..config import BGN_TO_EUR_RATE, MAPPERS_DIR
 from ..parsing import clean_header, clean_text, parse_amount, parse_date
 from .transaction import Transaction
 
@@ -46,6 +46,12 @@ def _load_mappers() -> dict[str, dict[str, str]]:
 
 
 MAPPERS: dict[str, dict[str, str]] = _load_mappers()
+log.warning(
+    "[mappers] Loaded %d from %s: %s",
+    len(MAPPERS),
+    MAPPERS_DIR,
+    list(MAPPERS.keys()),
+)
 
 
 def _resolve(mapper: dict[str, str], header: list[str]) -> dict[str, int] | None:
@@ -84,6 +90,10 @@ def parse_file(path: Path) -> tuple[str, list[Transaction]]:
         if chosen is None:
             raise ValueError(f"No mapper recognized the format of {path.name}")
         mapper_name, idx = chosen
+        # Mappers whose name ends with "-bgn" are BGN-denominated exports;
+        # amounts get converted to EUR here so the rest of the app stays
+        # currency-agnostic (everything internal is EUR).
+        rate = BGN_TO_EUR_RATE if mapper_name.endswith("-bgn") else 1.0
         transactions: list[Transaction] = []
         for row_idx, row in enumerate(reader):
             d = parse_date(row[idx["date"]]) if idx["date"] < len(row) else None
@@ -92,8 +102,8 @@ def parse_file(path: Path) -> tuple[str, list[Transaction]]:
             transactions.append(
                 Transaction(
                     date=d,
-                    debit=_amount(row, idx, "debit"),
-                    credit=_amount(row, idx, "credit"),
+                    debit=_convert(_amount(row, idx, "debit"), rate),
+                    credit=_convert(_amount(row, idx, "credit"), rate),
                     description=_text(row, idx, "description"),
                     counterparty=_text(row, idx, "counterparty"),
                     counterparty_account=_text(row, idx, "counterparty_account"),
@@ -119,3 +129,9 @@ def _amount(row: list[str], idx: dict[str, int], field: str) -> float | None:
         return None
     v = parse_amount(row[i])
     return round(v, 2) if v is not None else None
+
+
+def _convert(amount: float | None, rate: float) -> float | None:
+    if amount is None:
+        return None
+    return round(amount * rate, 2)

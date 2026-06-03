@@ -311,7 +311,6 @@ export default function Timeline({ from, to, onMeta, panelTarget }: Props) {
           flexShrink: 0,
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
           alignSelf: 'stretch',
           borderLeft: 1,
           borderColor: 'divider',

@@ -1,0 +1,10 @@
+{
+  "date": "Дата",
+  "description": "Основание",
+  "counterparty": "Наредител/Получател",
+  "counterparty_account": "Номер сметка на наредителя / получателя",
+  "transaction_type": "Вид на трансакцията",
+  "reference": "Свързваща референция",
+  "debit": "Дебит BGN",
+  "credit": "Кредит BGN"
+}

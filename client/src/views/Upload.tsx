@@ -119,7 +119,7 @@ export default function Upload() {
   }
 
   return (
-    <Box>
+    <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', pr: 1 }}>
       <Typography variant="h4" gutterBottom>
         Data
       </Typography>

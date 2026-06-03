@@ -52,12 +52,13 @@ function parseAmount(s: string | undefined): number {
   return parseFloat(trimmed)
 }
 
-const amountFormatter = new Intl.NumberFormat(undefined, {
-  style: 'currency',
-  currency: 'EUR',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
+// Mirrors server/app/config.py:BGN_TO_EUR_RATE — the ECB-locked irrevocable
+// peg (1 EUR = 1.95583 BGN). Used here to convert BGN cells when the user
+// selects a mix of BGN and EUR files; the server normalizes everything to
+// EUR at parse time so this constant only matters in the Inspect view, which
+// shows raw cells. Keep both copies in lockstep if it ever needs adjusting.
+const BGN_TO_EUR_RATE = 1 / 1.95583
+
 import {
   listCsvs,
   getCsv,
@@ -357,27 +358,66 @@ export default function Inspection() {
     return { debit, credit }
   }, [cleanedColumns])
 
+  // The Inspect table renders raw cells, so the summary formats in the
+  // *source* currency to match what the user sees. Currency is derived from
+  // each selected file's mapper (`-bgn` suffix → BGN, otherwise EUR). For
+  // mixed selections we display EUR — BGN rows get converted on the fly
+  // inside the totals computation so the sum is meaningful.
+  const summaryCurrency = useMemo<'EUR' | 'BGN' | null>(() => {
+    const currencies = new Set<'EUR' | 'BGN'>()
+    for (const name of selectedFiles) {
+      const f = files.find((x) => x.name === name)
+      if (!f) continue
+      currencies.add(f.mapper?.endsWith('-bgn') ? 'BGN' : 'EUR')
+    }
+    if (currencies.size === 0) return null
+    if (currencies.size > 1) return 'EUR'
+    return [...currencies][0]
+  }, [files, selectedFiles])
+
+  const summaryFormatter = useMemo(() => {
+    if (summaryCurrency === null) return null
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: summaryCurrency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  }, [summaryCurrency])
+
   const totals = useMemo(() => {
     if (cleanedRows.length === 0 || cleanedColumns.length === 0) return null
     const debitIdxs = Array.from(semanticCols.debit)
     const creditIdxs = Array.from(semanticCols.credit)
     if (debitIdxs.length === 0 && creditIdxs.length === 0) return null
+    // Per-file multiplier. Only matters when we display in EUR while some
+    // selected files are BGN — those rows get scaled by the irrevocable peg.
+    // For single-currency selections every rate is 1.0 (table cells are
+    // already in the displayed currency).
+    const rateByFile = new Map<string, number>()
+    if (summaryCurrency === 'EUR') {
+      for (const f of files) {
+        rateByFile.set(f.name, f.mapper?.endsWith('-bgn') ? BGN_TO_EUR_RATE : 1.0)
+      }
+    }
     let debit = 0
     let credit = 0
     let debitCount = 0
     let creditCount = 0
     for (const row of cleanedRows) {
+      const file = rowMeta.get(row)?.file
+      const rate = file ? rateByFile.get(file) ?? 1.0 : 1.0
       for (const i of debitIdxs) {
         const n = parseAmount(row[i])
         if (!Number.isNaN(n)) {
-          debit += n
+          debit += n * rate
           debitCount++
         }
       }
       for (const i of creditIdxs) {
         const n = parseAmount(row[i])
         if (!Number.isNaN(n)) {
-          credit += n
+          credit += n * rate
           creditCount++
         }
       }
@@ -391,7 +431,7 @@ export default function Inspection() {
       debitCols: debitIdxs.map((i) => cleanedColumns[i]),
       creditCols: creditIdxs.map((i) => cleanedColumns[i]),
     }
-  }, [cleanedColumns, cleanedRows, semanticCols])
+  }, [cleanedColumns, cleanedRows, semanticCols, summaryCurrency, files, rowMeta])
 
   const sorted = useMemo(() => {
     if (sortCol === null) return filtered
@@ -489,7 +529,6 @@ export default function Inspection() {
               ) : (
                 <Box
                   sx={{
-                    overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                     fontSize: '0.875rem',
@@ -732,7 +771,7 @@ export default function Inspection() {
           <Typography variant="subtitle1" gutterBottom>
             Summary {isMulti && `· ${selectedFiles.length} files`}
           </Typography>
-          {totals === null ? (
+          {totals === null || summaryFormatter === null ? (
             <Typography variant="body2" color="text.secondary">
               Could not detect debit/credit columns in this file. Expected column names containing
               "debit"/"дебит" or "credit"/"кредит".
@@ -753,7 +792,7 @@ export default function Inspection() {
                   Debit ({totals.debitCount} {totals.debitCount === 1 ? 'row' : 'rows'})
                 </Typography>
                 <Typography variant="h5" color="error.main" sx={{ fontWeight: 600 }}>
-                  {amountFormatter.format(totals.debit)}
+                  {summaryFormatter.format(totals.debit)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
                   {totals.debitCols.length > 0 ? `from: ${totals.debitCols.join(', ')}` : 'no column detected'}
@@ -773,7 +812,7 @@ export default function Inspection() {
                   Credit ({totals.creditCount} {totals.creditCount === 1 ? 'row' : 'rows'})
                 </Typography>
                 <Typography variant="h5" color="success.main" sx={{ fontWeight: 600 }}>
-                  {amountFormatter.format(totals.credit)}
+                  {summaryFormatter.format(totals.credit)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
                   {totals.creditCols.length > 0 ? `from: ${totals.creditCols.join(', ')}` : 'no column detected'}
@@ -801,7 +840,7 @@ export default function Inspection() {
                   color={totals.net >= 0 ? 'success.main' : 'error.main'}
                   sx={{ fontWeight: 600 }}
                 >
-                  {amountFormatter.format(totals.net)}
+                  {summaryFormatter.format(totals.net)}
                 </Typography>
               </Box>
             </Stack>

@@ -892,7 +892,6 @@ export default function Categorization() {
                           ) : (
                             <Box
                               sx={{
-                                overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
                                 fontSize: '0.875rem',
