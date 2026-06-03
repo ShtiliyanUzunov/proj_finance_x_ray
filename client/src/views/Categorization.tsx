@@ -92,9 +92,13 @@ export default function Categorization() {
   const [patterns, setPatterns] = useState<string[]>([])
   const [patternDraft, setPatternDraft] = useState('')
 
-  // Schema
+  // Schema — `availableColumns` is the canonical list of internal field names
+  // a rule may target; `columnLabels` translates each to the bank-specific
+  // column name the user actually recognizes (e.g. "description" → "Основание").
   const [availableColumns, setAvailableColumns] = useState<string[]>([])
+  const [columnLabels, setColumnLabels] = useState<Record<string, string>>({})
   const [schemaError, setSchemaError] = useState<string | null>(null)
+  const labelFor = (col: string) => columnLabels[col] ?? col
 
   // Groups state
   const [groups, setGroups] = useState<Group[]>([])
@@ -154,7 +158,10 @@ export default function Categorization() {
 
   useEffect(() => {
     getSchema()
-      .then((s) => setAvailableColumns(s.columns))
+      .then((s) => {
+        setAvailableColumns(s.columns)
+        setColumnLabels(s.labels ?? {})
+      })
       .catch((e) => setSchemaError(e instanceof Error ? e.message : String(e)))
   }, [])
 
@@ -592,12 +599,13 @@ export default function Categorization() {
             options={availableColumns}
             value={ruleColumns}
             onChange={(_, v) => setRuleColumns(v)}
+            getOptionLabel={labelFor}
             disabled={availableColumns.length === 0}
             sx={{ flex: 2, minWidth: 260 }}
             renderValue={(value, getItemProps) =>
               value.map((option, index) => {
                 const { key, ...itemProps } = getItemProps({ index })
-                return <Chip key={key} label={option} size="small" {...itemProps} />
+                return <Chip key={key} label={labelFor(option)} size="small" {...itemProps} />
               })
             }
             renderInput={(params) => (
@@ -875,8 +883,9 @@ export default function Categorization() {
                           updateRuleColumns(rule.id, typeof v === 'string' ? v.split(',') : v)
                         }}
                         disabled={availableColumns.length === 0}
-                        renderValue={(selected) =>
-                          selected.length === 0 ? (
+                        renderValue={(selected) => {
+                          const labels = selected.map(labelFor)
+                          return selected.length === 0 ? (
                             <Typography variant="body2" color="text.secondary">
                               (no columns)
                             </Typography>
@@ -888,12 +897,12 @@ export default function Categorization() {
                                 whiteSpace: 'nowrap',
                                 fontSize: '0.875rem',
                               }}
-                              title={selected.join(', ')}
+                              title={labels.join(', ')}
                             >
-                              {selected.length} · {selected.join(', ')}
+                              {selected.length} · {labels.join(', ')}
                             </Box>
                           )
-                        }
+                        }}
                       >
                         {availableColumns.map((col) => (
                           <MenuItem key={col} value={col} dense>
@@ -902,7 +911,7 @@ export default function Categorization() {
                               size="small"
                               sx={{ p: 0.5 }}
                             />
-                            <ListItemText primary={col} />
+                            <ListItemText primary={labelFor(col)} />
                           </MenuItem>
                         ))}
                       </Select>

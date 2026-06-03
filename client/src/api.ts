@@ -63,6 +63,10 @@ export function getCsvCategories(name: string): Promise<CsvCategoriesResponse> {
 
 export interface Schema {
   columns: string[]
+  // Display-only mapping from internal field name → bank-specific column name
+  // (e.g. "description" → "Основание"). Rules continue to store the internal
+  // name; this is purely for what the UI shows in pickers and chips.
+  labels: Record<string, string>
 }
 
 export function getSchema(): Promise<Schema> {

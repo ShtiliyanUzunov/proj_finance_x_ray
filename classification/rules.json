@@ -28,7 +28,8 @@
       "lily",
       "parkmart",
       "forno adeso",
-      "nikon nk"
+      "nikon nk",
+      "balev bio market"
     ],
     "color": "#e72323"
   },
@@ -82,7 +83,8 @@
       "hbomax",
       "такса пакетно обслужване",
       "claude ai",
-      "skyshowtime"
+      "skyshowtime",
+      "cursor ai"
     ],
     "color": "#2873b8"
   },
@@ -217,7 +219,8 @@
       "omv",
       "medina med",
       "lukoil",
-      "margel"
+      "margel",
+      "lukoyl"
     ],
     "color": "#59b1a2"
   },
@@ -238,7 +241,8 @@
       "emag",
       "temu",
       "english home",
-      "aiko"
+      "aiko",
+      "lilly d ring mall"
     ],
     "color": "#3f1008"
   },
@@ -253,7 +257,9 @@
     "patterns": [
       "sopharmacy",
       "spahieva",
-      "sana treyd ood"
+      "sana treyd ood",
+      "varna matrikaria",
+      "apteka arfa 7"
     ],
     "color": "#e5fbbc"
   }
