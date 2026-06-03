@@ -105,7 +105,7 @@ export default function Visualization() {
                 Reset
               </Button>
               <Box sx={{ flex: 1 }} />
-              {tab === 0 && timelineMeta && (
+              {tab === 1 && timelineMeta && (
                 <Chip
                   variant="outlined"
                   label={`${timelineMeta.count} ${
@@ -130,20 +130,20 @@ export default function Visualization() {
       <Paper variant="outlined" sx={{ display: 'flex', alignItems: 'stretch', overflow: 'hidden' }}>
         <Box ref={leftSideRef} sx={{ flex: 1, minWidth: 0 }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
-            <Tab label="Timeline" />
             <Tab label="Overview" />
+            <Tab label="Timeline" />
           </Tabs>
           <Box sx={{ p: 2 }}>
             {tab === 0 && available && (
+              <Overview from={from} to={to} panelTarget={timelinePanelEl} />
+            )}
+            {tab === 1 && available && (
               <Timeline
                 from={from}
                 to={to}
                 onMeta={setTimelineMeta}
                 panelTarget={timelinePanelEl}
               />
-            )}
-            {tab === 1 && available && (
-              <Overview from={from} to={to} panelTarget={timelinePanelEl} />
             )}
             {!available && (
               <Typography variant="body2" color="text.secondary">
