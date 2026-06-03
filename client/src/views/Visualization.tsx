@@ -71,15 +71,17 @@ export default function Visualization() {
           </Typography>
         ) : (
           <Stack spacing={2}>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: 'center' }}>
               <TextField
                 label="From"
                 type="date"
                 size="small"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                inputProps={{ min: available.min, max: available.max }}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  htmlInput: { min: available.min, max: available.max },
+                }}
               />
               <TextField
                 label="To"
@@ -87,8 +89,10 @@ export default function Visualization() {
                 size="small"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                inputProps={{ min: available.min, max: available.max }}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  htmlInput: { min: available.min, max: available.max },
+                }}
               />
               <Button
                 size="small"

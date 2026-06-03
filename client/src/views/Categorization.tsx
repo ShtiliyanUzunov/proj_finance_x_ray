@@ -525,7 +525,7 @@ export default function Categorization() {
               <Stack divider={<Divider flexItem />} spacing={0}>
                 {conflicts.map((c) => (
                   <Box key={`${c.source}:${c.row_index}`} sx={{ py: 1 }}>
-                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                       <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
                         {c.date}
                       </Typography>
@@ -594,10 +594,10 @@ export default function Categorization() {
             onChange={(_, v) => setRuleColumns(v)}
             disabled={availableColumns.length === 0}
             sx={{ flex: 2, minWidth: 260 }}
-            renderTags={(value, getTagProps) =>
+            renderValue={(value, getItemProps) =>
               value.map((option, index) => {
-                const { key, ...tagProps } = getTagProps({ index })
-                return <Chip key={key} label={option} size="small" {...tagProps} />
+                const { key, ...itemProps } = getItemProps({ index })
+                return <Chip key={key} label={option} size="small" {...itemProps} />
               })
             }
             renderInput={(params) => (
@@ -702,13 +702,6 @@ export default function Categorization() {
       {/* ------------------------------------------------------------------ */}
       {uncategorizedTxns.length > 0 && (
         <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
-          <Stack
-            direction="row"
-            alignItems="baseline"
-            justifyContent="space-between"
-            sx={{ mb: 1 }}
-          >
-          </Stack>
           <Typography
             variant="caption"
             color="text.secondary"
@@ -780,7 +773,7 @@ export default function Categorization() {
       {/* Rules list                                                          */}
       {/* ------------------------------------------------------------------ */}
       <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
-        <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 2 }}>
+        <Stack direction="row" sx={{ alignItems: 'baseline', justifyContent: 'space-between', mb: 2 }}>
           <Typography variant="subtitle1">
             Rules
           </Typography>
@@ -799,8 +792,7 @@ export default function Categorization() {
                 key={rule.id}
                 direction="row"
                 spacing={2}
-                alignItems="center"
-                sx={{ py: 1.5 }}
+                sx={{ alignItems: 'center', py: 1.5 }}
               >
                 <Box sx={{ width: 32, textAlign: 'center', color: 'text.secondary' }}>
                   <Typography variant="caption" sx={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -995,10 +987,10 @@ export default function Categorization() {
             onChange={(_, v) => setGroupChildren(v)}
             getOptionLabel={(id) => resolveChild(id).label}
             sx={{ flex: 2, minWidth: 260 }}
-            renderTags={(value, getTagProps) =>
+            renderValue={(value, getItemProps) =>
               value.map((id, index) => {
-                const { key, ...tagProps } = getTagProps({ index })
-                return <Chip key={key} label={resolveChild(id).label} size="small" {...tagProps} />
+                const { key, ...itemProps } = getItemProps({ index })
+                return <Chip key={key} label={resolveChild(id).label} size="small" {...itemProps} />
               })
             }
             renderInput={(params) => (
@@ -1033,7 +1025,7 @@ export default function Categorization() {
       {/* Groups list                                                         */}
       {/* ------------------------------------------------------------------ */}
       <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 2 }}>
+        <Stack direction="row" sx={{ alignItems: 'baseline', justifyContent: 'space-between', mb: 2 }}>
           <Typography variant="subtitle1">Groups</Typography>
           <Typography variant="caption" color="text.secondary">
             {groups.length} {groups.length === 1 ? 'group' : 'groups'}
@@ -1062,8 +1054,7 @@ export default function Categorization() {
                   key={g.id}
                   direction="row"
                   spacing={2}
-                  alignItems="center"
-                  sx={{ py: 1.5 }}
+                  sx={{ alignItems: 'center', py: 1.5 }}
                 >
                   <Box sx={{ minWidth: 160 }}>
                     <Chip label={g.name} color="secondary" size="small" />

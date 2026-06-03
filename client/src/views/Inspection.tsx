@@ -508,8 +508,10 @@ export default function Inspection() {
                 <ListItemText
                   primary={f.name}
                   secondary={`${f.rows} rows`}
-                  primaryTypographyProps={{ variant: 'body2' }}
-                  secondaryTypographyProps={{ variant: 'caption' }}
+                  slotProps={{
+                    primary: { variant: 'body2' },
+                    secondary: { variant: 'caption' },
+                  }}
                 />
               </MenuItem>
             ))}
@@ -525,12 +527,14 @@ export default function Inspection() {
             setPage(0)
           }}
           disabled={cleanedRows.length === 0}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            },
           }}
         />
         <Button

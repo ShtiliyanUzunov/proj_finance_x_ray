@@ -233,11 +233,6 @@ export default function Overview({ from, to, panelTarget }: Props) {
     () => visibleSlices.reduce((acc, s) => acc + s.value, 0),
     [visibleSlices],
   )
-  const totalTxns = useMemo(
-    () => visibleSlices.reduce((acc, s) => acc + s.txnCount, 0),
-    [visibleSlices],
-  )
-
   // Count of distinct calendar months touched by [from, to] (inclusive). Used
   // to derive a monthly-average spend per slice. Falls back to 1 so a one-day
   // range still shows a meaningful (non-divide-by-zero) average.
@@ -467,7 +462,7 @@ export default function Overview({ from, to, panelTarget }: Props) {
                             color: alpha(s.color, 0.5),
                             '&.Mui-checked': { color: s.color },
                           }}
-                          inputProps={{ 'aria-label': `Include ${s.label}` }}
+                          slotProps={{ input: { 'aria-label': `Include ${s.label}` } }}
                         />
                         <Typography
                           variant="body2"

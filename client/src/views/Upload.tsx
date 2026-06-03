@@ -173,7 +173,7 @@ export default function Upload() {
                 key={f.name}
                 disablePadding
                 secondaryAction={
-                  <Stack direction="row" spacing={1} alignItems="center">
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                     <Box sx={{ minWidth: 110, textAlign: 'right' }}>
                       {f.debit !== null && (
                         <Chip
